@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Tetris - Gesture Control App{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tetris.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="tetris-container">
+    <div class="game-area">
+        <canvas id="tetris" width="240" height="400"></canvas>
+        
+        <div class="game-sidebar">
+            <div class="next-piece-container">
+                <h3>Next Piece</h3>
+                <canvas id="nextPiece" width="80" height="80"></canvas>
+            </div>
+            
+            <div class="score-container">
+                <h3>Score</h3>
+                <div id="score">0</div>
+                
+                <h3>Lines</h3>
+                <div id="lines">0</div>
+                
+                <h3>Level</h3>
+                <div id="level">1</div>
+            </div>
+            
+            <div class="controls-info">
+                <h3>Controls</h3>
+                <ul>
+                    <li>← / → : Move left/right</li>
+                    <li>↑ : Rotate clockwise</li>
+                    <li>↓ : Soft drop</li>
+                    <li>Space : Hard drop</li>
+                </ul>
+            </div>
+            
+            <div class="gesture-display">
+                <h3>Detected Gesture</h3>
+                <div id="gestureIcon" class="gesture-icon">
+                    <span id="gestureText">No gesture</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="game-controls">
+        <button id="startGameBtn">Start Game</button>
+        <button id="pauseGameBtn">Pause</button>
+        <button id="restartGameBtn">Restart</button>
+    </div>
+    
+    <div class="webcam-container">
+        <h3>Gesture Control (Webcam)</h3>
+        <div id="webcamPreview" class="webcam-preview">
+            <img id="webcamFeed" src="/video_feed?camera_id=0" alt="Webcam feed">
+        </div>
+    </div>
+</div>
+
+<div id="gameOverModal" class="modal">
+    <div class="modal-content">
+        <h2>Game Over</h2>
+        <p>Your score: <span id="finalScore">0</span></p>
+        <p>Lines cleared: <span id="finalLines">0</span></p>
+        <button id="newGameBtn">New Game</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/tetris.js') }}"></script>
+{% endblock %}
