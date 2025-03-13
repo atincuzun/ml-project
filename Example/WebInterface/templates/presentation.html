@@ -1,0 +1,182 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gesture-Controlled Presentation</title>
+    <link rel="stylesheet" href="../RevealJS/reveal.js-master/dist/reveal.css">
+    <link rel="stylesheet" href="../RevealJS/reveal.js-master/dist/theme/black.css">
+    <style>
+        .rotatable {
+            transition: all 0.5s ease-in-out;
+        }
+        .detection-status-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 250px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 1000;
+        }
+        
+        .status-box {
+            background-color: rgba(50, 50, 50, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #555;
+            font-family: monospace;
+            font-size: 16px;
+            color: #00ff00;
+            min-height: 20px;
+            margin-top: 5px;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Updated uneditable detection status display -->
+    <div class="detection-status-container">
+        <h3>Gesture Detection</h3>
+        <div id="detection-status" class="status-box" readonly>No gesture detected</div>
+    </div>
+    
+    <div class="reveal">
+        <div class="slides">
+            <section>
+                <h1>Gesture-Controlled Presentation</h1>
+                <p>Control this presentation with hand gestures!</p>
+                <ul>
+                    <li>Rotate your hand to rotate images</li>
+                    <li>Swipe left/right to navigate slides</li>
+                </ul>
+            </section>
+            <section>
+                <h2>Rotation Demo</h2>
+                <img src="../MediaPipe/slideshow/slideshow/images/1.jpg" class="rotatable" alt="Image 1">
+            </section>
+            <section>
+                <h2>Another Image</h2>
+                <img src="../MediaPipe/slideshow/slideshow/images/2.jpg" class="rotatable" alt="Image 2">
+            </section>
+            <section>
+                <h2>One More</h2>
+                <img src="../MediaPipe/slideshow/slideshow/images/3.jpg" class="rotatable" alt="Image 3">
+            </section>
+            <section>
+                <h2>Thank You!</h2>
+                <p>Try the rotation gesture on this slide too!</p>
+                <img src="../MediaPipe/slideshow/slideshow/images/4.jpg" class="rotatable" alt="Image 4">
+            </section>
+        </div>
+    </div>
+
+    <script src="../RevealJS/reveal.js-master/dist/reveal.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        // Initialize reveal.js
+        Reveal.initialize({
+            hash: true,
+            loop: true
+        });
+        
+        // Connect to Socket.IO
+        const socket = io();
+        const statusElement = document.getElementById('detection-status');
+        
+        // Function to update the detection status display
+        function updateDetectionStatus(gesture) {
+            if (statusElement) {
+                // Format the gesture name for display
+                let displayText = gesture;
+                if (gesture === 'idle') {
+                    displayText = 'No gesture detected';
+                    statusElement.style.color = "#888888";
+                } else if (gesture.includes("rotate")) {
+                    displayText = 'Rotating';
+                    statusElement.style.color = "#00ff00";
+                } else if (gesture.includes("swipe_left")) {
+                    displayText = 'Swiping Left';
+                    statusElement.style.color = "#00ff00";
+                } else if (gesture.includes("swipe_right")) {
+                    displayText = 'Swiping Right';
+                    statusElement.style.color = "#00ff00";
+                } else {
+                    statusElement.style.color = "#ffff00";
+                }
+                
+                statusElement.textContent = displayText;
+            }
+        }
+        
+        // Handle rotation function
+        function rotateImages() {
+            const currentSlide = Reveal.getCurrentSlide();
+            const rotatables = currentSlide.querySelectorAll('.rotatable');
+            
+            rotatables.forEach(element => {
+                // Get current rotation or start at 0
+                const currentRotation = element.style.transform 
+                    ? parseInt(element.style.transform.replace('rotate(', '').replace('deg)', '')) || 0
+                    : 0;
+                
+                // Add 30 degrees rotation
+                element.style.transform = `rotate(${currentRotation + 30}deg)`;
+            });
+        }
+        
+        // Listen for gesture updates
+        socket.on('gesture_update', function(data) {
+            updateDetectionStatus(data.gesture);
+        });
+        
+        // Listen for gesture events
+        socket.on('gesture', function(data) {
+            console.log('Gesture event received:', data.gesture);
+            
+            switch(data.gesture) {
+                case 'rotate':
+                    rotateImages();
+                    break;
+                case 'swipe_left':
+                    Reveal.right();  // Move to next slide
+                    break;
+                case 'swipe_right':
+                    Reveal.left();   // Move to previous slide
+                    break;
+            }
+        });
+        
+        // Alternative method using HTTP polling for non-websocket clients
+        function pollCurrentGesture() {
+            fetch('/get_current_gesture')
+                .then(response => response.json())
+                .then(data => {
+                    updateDetectionStatus(data.gesture);
+                })
+                .catch(error => {
+                    console.error('Error fetching gesture:', error);
+                });
+        }
+        
+        // Poll every 500ms as a fallback if websocket disconnects
+        let pollingInterval = null;
+        
+        socket.on('disconnect', function() {
+            console.log('Socket disconnected, switching to polling');
+            if (!pollingInterval) {
+                pollingInterval = setInterval(pollCurrentGesture, 500);
+            }
+        });
+        
+        socket.on('connect', function() {
+            console.log('Socket connected, stopping polling');
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        });
+    </script>
+</body>
+</html>
