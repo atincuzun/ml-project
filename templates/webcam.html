@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Webcam Input - Gesture Control App{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/webcam.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Webcam Gesture Recognition</h2>
+    
+    <div class="controls">
+        <button id="selectCameraBtn" class="control-button">Select Camera</button>
+        <button id="startLoggingBtn" class="control-button">Start Logging</button>
+        <button id="saveLogBtn" class="control-button" disabled>Save Log</button>
+        
+        <select id="cameraSelect" class="camera-select">
+            <option value="">Loading cameras...</option>
+        </select>
+    </div>
+    
+    <div class="display-container">
+        <div class="video-box">
+            <h3>Camera Feed</h3>
+            <div id="cameraFeed" class="feed-display">
+                <img id="cameraImage" src="{{ url_for('static', filename='img/camera-placeholder.jpg') }}" alt="Camera feed">
+            </div>
+        </div>
+        
+        <div class="video-box">
+            <h3>Pose Detection</h3>
+            <div id="poseDetection" class="feed-display">
+                <img id="poseImage" src="{{ url_for('static', filename='img/pose-placeholder.jpg') }}" alt="Pose detection">
+            </div>
+        </div>
+        
+        <div class="video-box">
+            <h3>Gesture Recognition</h3>
+            <div id="gestureRecognition" class="feed-display">
+                <div id="gestureIcon" class="gesture-icon">
+                    <span id="gestureText">No gesture detected</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="log-container">
+        <h3>Gesture Log</h3>
+        <textarea id="logOutput" class="log-output" readonly rows="10"></textarea>
+    </div>
+</div>
+
+<div id="saveModal" class="modal">
+    <div class="modal-content">
+        <h3>Save CSV Log</h3>
+        <div class="form-group">
+            <label for="fileName">File Name:</label>
+            <input type="text" id="fileName" value="performance_results.csv">
+        </div>
+        <div class="form-group">
+            <label for="filePath">Save Location:</label>
+            <input type="text" id="filePath" value="./logs/">
+        </div>
+        <div class="button-group">
+            <button id="confirmSaveBtn">Save</button>
+            <button id="cancelSaveBtn">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/webcam.js') }}"></script>
+{% endblock %}
