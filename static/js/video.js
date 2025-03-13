@@ -120,6 +120,21 @@ document.addEventListener('DOMContentLoaded', function() {
         // Set up EventSource for video stream
         videoEventSource = new EventSource('/video_process_feed');
 
+        // Connect to gesture stream for the video processor
+        const gestureEventSource = new EventSource('/gesture_stream');
+
+        gestureEventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.gesture !== 'idle') {
+                    updateGestureDisplay(data.gesture);
+                    logGesture(data.gesture);
+                }
+            } catch (error) {
+                console.error('Error parsing gesture data:', error);
+            }
+        };
+
         videoEventSource.onmessage = function(event) {
             // Split the combined data (original image, pose image, gesture data)
             const parts = event.data.split('FRAME_DELIMITER');
@@ -132,19 +147,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Handle pose image
                 const poseImageBlob = new Blob([parts[1]], { type: 'image/jpeg' });
                 poseImage.src = URL.createObjectURL(poseImageBlob);
-
-                // Handle gesture data
-                try {
-                    const gestureData = JSON.parse(parts[2]);
-                    updateGestureDisplay(gestureData.gesture);
-
-                    // Log the gesture
-                    if (gestureData.gesture !== 'idle') {
-                        logGesture(gestureData.gesture);
-                    }
-                } catch (e) {
-                    console.error('Error parsing gesture data:', e);
-                }
             }
         };
 
@@ -152,7 +154,13 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Video stream ended or error occurred');
             stopVideo();
             videoCompleted();
+            if (gestureEventSource) {
+                gestureEventSource.close();
+            }
         };
+
+        // Store the gestureEventSource to close it when needed
+        window.gestureEventSource = gestureEventSource;
 
         isVideoPlaying = true;
         saveLogBtn.disabled = true;
@@ -162,6 +170,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (videoEventSource) {
             videoEventSource.close();
             videoEventSource = null;
+        }
+
+        if (window.gestureEventSource) {
+            window.gestureEventSource.close();
         }
 
         isVideoPlaying = false;

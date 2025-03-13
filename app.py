@@ -1,12 +1,18 @@
-from flask import Flask, render_template, request, Response, jsonify
+from flask import Flask, render_template, request, Response, jsonify, send_from_directory
 import os
 import json
 import webbrowser
 from threading import Timer
 import cv2
 import time
+import numpy as np
 from utils.mediapipe_processor import MediapipeProcessor
 from utils.data_handler import CSVDataHandler
+
+# Configure logging to reduce noise
+import logging
+
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 app = Flask(__name__)
 app.config.from_pyfile('config.py')
@@ -61,6 +67,12 @@ def presentation():
 	return render_template('presentation.html', active_page='presentation', presentations=presentations)
 
 
+@app.route('/favicon.ico')
+def favicon():
+	"""Serve the favicon"""
+	return send_from_directory(app.static_folder, 'favicon.ico')
+
+
 @app.route('/get_cameras')
 def get_cameras():
 	"""Get a list of available camera devices"""
@@ -88,36 +100,55 @@ def video_feed():
 	camera_id = request.args.get('camera_id', default=0, type=int)
 	
 	def generate():
-		cap = cv2.VideoCapture(camera_id)
-		
-		while cap.isOpened():
-			success, frame = cap.read()
-			if not success:
-				break
+		try:
+			cap = cv2.VideoCapture(camera_id)
 			
-			# Process frame with MediaPipe
-			processed_frame, pose_frame, gesture = processor.process_frame(frame)
+			# Check if camera opened successfully
+			if not cap.isOpened():
+				# Create dummy frames with error message
+				frame_height, frame_width = 480, 640
+				dummy_frame = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)
+				cv2.putText(dummy_frame, "Camera not available", (50, frame_height // 2),
+				            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+				
+				# Encode and send the dummy frames
+				ret, buffer_original = cv2.imencode('.jpg', dummy_frame)
+				ret, buffer_pose = cv2.imencode('.jpg', dummy_frame)
+				
+				# Combine frames with a delimiter for frontend to split
+				combined_data = buffer_original.tobytes() + b"FRAME_DELIMITER" + buffer_pose.tobytes() + b"FRAME_DELIMITER"
+				
+				yield (b'--frame\r\n'
+				       b'Content-Type: image/jpeg\r\n\r\n' + combined_data + b'\r\n')
+				return
 			
-			# If logging is enabled, record the data
-			if processor.is_logging:
-				timestamp = int(time.time() * 1000)  # Current time in milliseconds
-				data_handler.add_frame(processor.last_pose_data, timestamp, gesture)
-			
-			# Encode the frames
-			ret, buffer_original = cv2.imencode('.jpg', processed_frame)
-			ret, buffer_pose = cv2.imencode('.jpg', pose_frame)
-			
-			# Combine frames with a delimiter for frontend to split
-			combined_data = buffer_original.tobytes() + b"FRAME_DELIMITER" + buffer_pose.tobytes() + b"FRAME_DELIMITER"
-			
-			# Add gesture info
-			gesture_data = json.dumps({"gesture": gesture}).encode('utf-8')
-			combined_data += gesture_data
-			
-			yield (b'--frame\r\n'
-			       b'Content-Type: image/jpeg\r\n\r\n' + combined_data + b'\r\n')
-		
-		cap.release()
+			while cap.isOpened():
+				success, frame = cap.read()
+				if not success:
+					break
+				
+				# Process frame with MediaPipe
+				processed_frame, pose_frame, gesture = processor.process_frame(frame)
+				
+				# If logging is enabled, record the data
+				if processor.is_logging:
+					timestamp = int(time.time() * 1000)  # Current time in milliseconds
+					data_handler.add_frame(processor.last_pose_data, timestamp, gesture)
+				
+				# Encode the frames
+				ret, buffer_original = cv2.imencode('.jpg', processed_frame)
+				ret, buffer_pose = cv2.imencode('.jpg', pose_frame)
+				
+				# Combine frames with a delimiter for frontend to split
+				combined_data = buffer_original.tobytes() + b"FRAME_DELIMITER" + buffer_pose.tobytes() + b"FRAME_DELIMITER"
+				
+				yield (b'--frame\r\n'
+				       b'Content-Type: image/jpeg\r\n\r\n' + combined_data + b'\r\n')
+		except Exception as e:
+			print(f"Error in video feed: {e}")
+		finally:
+			if 'cap' in locals() and cap is not None:
+				cap.release()
 	
 	return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
@@ -163,14 +194,32 @@ def video_process_feed():
 			# Combine frames with a delimiter for frontend to split
 			combined_data = buffer_original.tobytes() + b"FRAME_DELIMITER" + buffer_pose.tobytes() + b"FRAME_DELIMITER"
 			
-			# Add gesture info
-			gesture_data = json.dumps({"gesture": gesture}).encode('utf-8')
-			combined_data += gesture_data
-			
 			yield (b'--frame\r\n'
 			       b'Content-Type: image/jpeg\r\n\r\n' + combined_data + b'\r\n')
 	
 	return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+@app.route('/gesture_stream')
+def gesture_stream():
+	"""Stream of detected gestures using Server-Sent Events (SSE)"""
+	
+	def generate():
+		last_gesture = "idle"
+		
+		while True:
+			current_gesture = processor.last_gesture
+			
+			# Only send when gesture changes
+			if current_gesture != last_gesture:
+				data = json.dumps({'gesture': current_gesture})
+				yield f"data: {data}\n\n"
+				last_gesture = current_gesture
+			
+			# Still need a small delay to prevent CPU overuse
+			time.sleep(0.1)
+	
+	return Response(generate(), mimetype='text/event-stream')
 
 
 @app.route('/toggle_logging', methods=['POST'])
@@ -208,14 +257,19 @@ def save_csv():
 @app.route('/open_presentation/<name>')
 def open_presentation(name):
 	"""Return the path to the presentation to open in a new tab"""
-	presentation_path = f'/static/presentations/{name}/index.html'
-	return jsonify({'path': presentation_path})
-
-
-@app.route('/get_gesture')
-def get_gesture():
-	"""Get the current detected gesture for Tetris"""
-	return jsonify({'gesture': processor.last_gesture})
+	presentations_dir = os.path.join(app.static_folder, 'presentations')
+	controller_path = '/static/js/presentation-controller.js'
+	
+	# Check if it's a file directly in the presentations directory
+	if os.path.isfile(os.path.join(presentations_dir, name)):
+		presentation_path = f'/static/presentations/{name}'
+	else:
+		presentation_path = f'/static/presentations/{name}'
+	
+	return jsonify({
+		'path': presentation_path,
+		'controller': controller_path
+	})
 
 
 if __name__ == '__main__':

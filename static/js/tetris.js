@@ -63,8 +63,38 @@ document.addEventListener('DOMContentLoaded', function() {
         next: null
     };
 
-    // Initialize the webcam stream
+    // Start webcam feed for gesture recognition
     startWebcamFeed();
+
+    // Connect to gesture stream
+    connectToGestureStream();
+
+    function connectToGestureStream() {
+        const eventSource = new EventSource('/gesture_stream');
+
+        eventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.gesture !== 'idle') {
+                    handleGesture(data.gesture);
+                    updateGestureDisplay(data.gesture);
+                }
+            } catch (error) {
+                console.error('Error parsing gesture data:', error);
+            }
+        };
+
+        eventSource.onerror = function(error) {
+            console.error('EventSource error:', error);
+            setTimeout(() => {
+                console.log('Reconnecting to gesture stream...');
+                connectToGestureStream();
+            }, 3000);
+        };
+
+        // Store the eventSource to close it when needed
+        window.gestureEventSource = eventSource;
+    }
 
     // Event listeners
     startGameBtn.addEventListener('click', startGame);
@@ -76,9 +106,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     document.addEventListener('keydown', handleKeyPress);
-
-    // Poll for gestures
-    const gestureInterval = setInterval(pollGestures, 200);
 
     // Functions
     function createBoard() {
@@ -455,22 +482,6 @@ document.addEventListener('DOMContentLoaded', function() {
         webcamFeed.src = videoUrl;
     }
 
-    async function pollGestures() {
-        if (!gameActive || gamePaused) return;
-
-        try {
-            const response = await fetch('/get_gesture');
-            const data = await response.json();
-
-            // Apply gesture actions
-            if (data.gesture !== 'idle') {
-                handleGesture(data.gesture);
-            }
-        } catch (error) {
-            console.error('Error polling gestures:', error);
-        }
-    }
-
     function handleGesture(gesture) {
         if (!gameActive || gamePaused) return;
 
@@ -496,6 +507,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Clean up when page unloads
     window.addEventListener('beforeunload', () => {
-        clearInterval(gestureInterval);
+        if (window.gestureEventSource) {
+            window.gestureEventSource.close();
+        }
     });
 });

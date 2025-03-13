@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const cancelSaveBtn = document.getElementById('cancelSaveBtn');
     const fileName = document.getElementById('fileName');
     const filePath = document.getElementById('filePath');
+    const keyboardInfoElement = document.getElementById('keyboardInfo');
 
     // State variables
     let selectedCamera = 0;
@@ -21,9 +22,46 @@ document.addEventListener('DOMContentLoaded', function() {
     let isLogging = false;
     let logStartTime = 0;
     let logData = '';
+    let lastGestureTime = 0;
+    const GESTURE_COOLDOWN = 1000; // 1 second cooldown between gesture simulations
 
     // Load available cameras
     fetchCameras();
+
+    // Connect to gesture stream
+    connectToGestureStream();
+
+    // Connect to the Server-Sent Events stream for gestures
+    function connectToGestureStream() {
+        const eventSource = new EventSource('/gesture_stream');
+
+        eventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.gesture !== 'idle') {
+                    updateGestureDisplay(data.gesture);
+
+                    // If logging is active, log the gesture
+                    if (isLogging) {
+                        logGesture(data.gesture);
+                    }
+                }
+            } catch (error) {
+                console.error('Error parsing gesture data:', error);
+            }
+        };
+
+        eventSource.onerror = function(error) {
+            console.error('EventSource error:', error);
+            setTimeout(() => {
+                console.log('Reconnecting to gesture stream...');
+                connectToGestureStream();
+            }, 3000);
+        };
+
+        // Store the eventSource to close it when needed
+        window.gestureEventSource = eventSource;
+    }
 
     // Event listeners
     selectCameraBtn.addEventListener('click', () => {
@@ -53,6 +91,46 @@ document.addEventListener('DOMContentLoaded', function() {
 
     cancelSaveBtn.addEventListener('click', () => {
         saveModal.style.display = 'none';
+    });
+
+    // Add keyboard event listener for gesture simulation
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+            e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            // Prevent default behavior for arrow keys
+            e.preventDefault();
+
+            // Check cooldown to prevent gesture spamming
+            const currentTime = Date.now();
+            if (currentTime - lastGestureTime < GESTURE_COOLDOWN) {
+                return;
+            }
+
+            lastGestureTime = currentTime;
+
+            let gesture = '';
+            switch (e.key) {
+                case 'ArrowLeft':
+                    gesture = 'swipe_left';
+                    break;
+                case 'ArrowRight':
+                    gesture = 'swipe_right';
+                    break;
+                case 'ArrowUp':
+                    gesture = 'rotate_cw';
+                    break;
+                case 'ArrowDown':
+                    gesture = 'rotate_ccw';
+                    break;
+            }
+
+            if (gesture) {
+                updateGestureDisplay(gesture);
+                if (isLogging) {
+                    logGesture(gesture);
+                }
+            }
+        }
     });
 
     // Functions
@@ -89,55 +167,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (isStreaming) return;
 
         const videoUrl = `/video_feed?camera_id=${selectedCamera}`;
-
-        // Set up the event source for video feed
-        const eventSource = new EventSource(videoUrl);
-
-        // Handle streaming events
-        eventSource.onmessage = function(event) {
-            // Split the combined data (original image, pose image, gesture data)
-            const parts = event.data.split('FRAME_DELIMITER');
-
-            if (parts.length >= 3) {
-                // Handle original image
-                const originalImageBlob = new Blob([parts[0]], { type: 'image/jpeg' });
-                cameraImage.src = URL.createObjectURL(originalImageBlob);
-
-                // Handle pose image
-                const poseImageBlob = new Blob([parts[1]], { type: 'image/jpeg' });
-                poseImage.src = URL.createObjectURL(poseImageBlob);
-
-                // Handle gesture data
-                try {
-                    const gestureData = JSON.parse(parts[2]);
-                    updateGestureDisplay(gestureData.gesture);
-
-                    // If logging is active, log the gesture
-                    if (isLogging && gestureData.gesture !== 'idle') {
-                        logGesture(gestureData.gesture);
-                    }
-                } catch (e) {
-                    console.error('Error parsing gesture data:', e);
-                }
-            }
-        };
-
-        eventSource.onerror = function(error) {
-            console.error('Error with video stream:', error);
-            stopVideoStream();
-        };
-
+        cameraImage.src = videoUrl;
         isStreaming = true;
     }
 
     function stopVideoStream() {
         if (!isStreaming) return;
-
-        // Close event source
-        if (window.eventSource) {
-            window.eventSource.close();
-        }
-
         isStreaming = false;
     }
 
@@ -236,5 +271,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Clean up resources when page unloads
     window.addEventListener('beforeunload', () => {
         stopVideoStream();
+        if (window.gestureEventSource) {
+            window.gestureEventSource.close();
+        }
     });
 });

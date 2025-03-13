@@ -9,17 +9,17 @@
 {% block content %}
 <div class="container">
     <h2>Webcam Gesture Recognition</h2>
-    
+
     <div class="controls">
         <button id="selectCameraBtn" class="control-button">Select Camera</button>
         <button id="startLoggingBtn" class="control-button">Start Logging</button>
         <button id="saveLogBtn" class="control-button" disabled>Save Log</button>
-        
+
         <select id="cameraSelect" class="camera-select">
             <option value="">Loading cameras...</option>
         </select>
     </div>
-    
+
     <div class="display-container">
         <div class="video-box">
             <h3>Camera Feed</h3>
@@ -27,14 +27,14 @@
                 <img id="cameraImage" src="{{ url_for('static', filename='img/camera-placeholder.jpg') }}" alt="Camera feed">
             </div>
         </div>
-        
+
         <div class="video-box">
             <h3>Pose Detection</h3>
             <div id="poseDetection" class="feed-display">
                 <img id="poseImage" src="{{ url_for('static', filename='img/pose-placeholder.jpg') }}" alt="Pose detection">
             </div>
         </div>
-        
+
         <div class="video-box">
             <h3>Gesture Recognition</h3>
             <div id="gestureRecognition" class="feed-display">
@@ -44,7 +44,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="log-container">
         <h3>Gesture Log</h3>
         <textarea id="logOutput" class="log-output" readonly rows="10"></textarea>

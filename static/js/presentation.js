@@ -8,8 +8,40 @@ document.addEventListener('DOMContentLoaded', function() {
     // Start webcam feed for gesture detection
     initWebcam();
 
-    // Poll for gestures
-    const gestureInterval = setInterval(pollGestures, 200);
+    // Connect to gesture stream
+    connectToGestureStream();
+
+    // Function to initialize webcam
+    function initWebcam() {
+        webcamFeed.src = '/video_feed?camera_id=0';
+    }
+
+    // Connect to the Server-Sent Events stream for gestures
+    function connectToGestureStream() {
+        const eventSource = new EventSource('/gesture_stream');
+
+        eventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.gesture !== 'idle') {
+                    updateGestureDisplay(data.gesture);
+                }
+            } catch (error) {
+                console.error('Error parsing gesture data:', error);
+            }
+        };
+
+        eventSource.onerror = function(error) {
+            console.error('EventSource error:', error);
+            setTimeout(() => {
+                console.log('Reconnecting to gesture stream...');
+                connectToGestureStream();
+            }, 3000);
+        };
+
+        // Store the eventSource to close it when needed
+        window.gestureEventSource = eventSource;
+    }
 
     // Add click event handlers to open presentation buttons
     openButtons.forEach(button => {
@@ -19,25 +51,6 @@ document.addEventListener('DOMContentLoaded', function() {
             openPresentation(presentationName, presentationType);
         });
     });
-
-    // Function to initialize webcam
-    function initWebcam() {
-        webcamFeed.src = '/video_feed?camera_id=0';
-    }
-
-    // Function to poll for gestures
-    async function pollGestures() {
-        try {
-            const response = await fetch('/get_gesture');
-            const data = await response.json();
-
-            if (data.gesture !== 'idle') {
-                updateGestureDisplay(data.gesture);
-            }
-        } catch (error) {
-            console.error('Error polling gestures:', error);
-        }
-    }
 
     // Function to update gesture display
     function updateGestureDisplay(gesture) {
@@ -98,77 +111,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Set up gesture communication with presentation window
-    function setupGestureCommunication(presentationWindow) {
-        // Modify the gesture polling to also send gestures to presentation window
-        const enhancedGestureInterval = setInterval(async function() {
-            try {
-                const response = await fetch('/get_gesture');
-                const data = await response.json();
-
-                if (data.gesture !== 'idle') {
-                    updateGestureDisplay(data.gesture);
-
-                    // Send the gesture to the presentation window
-                    presentationWindow.postMessage({
-                        type: 'gesture',
-                        gesture: data.gesture
-                    }, '*');
-                }
-            } catch (error) {
-                console.error('Error polling gestures:', error);
-            }
-        }, 200);
-
-        // Clear interval when presentation window closes
-        const checkWindowInterval = setInterval(function() {
-            if (presentationWindow.closed) {
-                clearInterval(enhancedGestureInterval);
-                clearInterval(checkWindowInterval);
-            }
-        }, 1000);
-    }
-
     // Clean up on page unload
     window.addEventListener('beforeunload', () => {
-        clearInterval(gestureInterval);
-    });
-});document.addEventListener('DOMContentLoaded', function() {
-    // Find all open presentation buttons
-    const openButtons = document.querySelectorAll('.open-btn');
-
-    // Add click event handlers to open presentation buttons
-    openButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const presentationName = this.getAttribute('data-presentation');
-            const presentationType = this.getAttribute('data-type');
-            openPresentation(presentationName, presentationType);
-        });
-    });
-
-    // Function to open a presentation in a new tab
-    async function openPresentation(presentationName, presentationType) {
-        try {
-            const response = await fetch(`/open_presentation/${presentationName}`);
-            const data = await response.json();
-
-            if (data.path) {
-                // Determine the correct path based on presentation type
-                let fullPath = data.path;
-
-                // If it's a directory, append index.html if not already included
-                if (presentationType === 'directory' && !fullPath.endsWith('index.html')) {
-                    fullPath = `${fullPath}/index.html`;
-                }
-
-                // Open the presentation in a new tab
-                window.open(fullPath, '_blank');
-            } else {
-                alert('Error opening presentation');
-            }
-        } catch (error) {
-            console.error('Error opening presentation:', error);
-            alert('Error opening presentation');
+        if (window.gestureEventSource) {
+            window.gestureEventSource.close();
         }
-    }
+    });
 });
