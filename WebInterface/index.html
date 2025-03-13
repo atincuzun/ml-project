@@ -3,50 +3,781 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ML Project</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Gesture Recognition ML Project</title>
+    
+    <!-- RevealJS CSS - USING ABSOLUTE PATHS -->
+    <link rel="stylesheet" href="/RevealJS/reveal.js-master/dist/reset.css">
+    <link rel="stylesheet" href="/RevealJS/reveal.js-master/dist/reveal.css">
+    <link rel="stylesheet" href="/RevealJS/reveal.js-master/dist/theme/black.css" id="theme">
+    
+    <!-- Main CSS -->
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2980b9;
+            --background-color: #f5f5f5;
+            --card-bg-color: #fff;
+            --border-color: #ddd;
+            --text-color: #333;
+            --success-color: #2ecc71;
+            --warning-color: #f39c12;
+            --error-color: #e74c3c;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            text-align: center;
+            padding: 1.5rem;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        header h1 {
+            margin-bottom: 0.5rem;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        
+        .card {
+            background-color: var(--card-bg-color);
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .card h2 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+        
+        .wide-card {
+            grid-column: span 2;
+        }
+        
+        .input-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        label {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            display: block;
+        }
+        
+        input, select {
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.6rem 1.2rem;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        button:disabled {
+            background-color: var(--border-color);
+            cursor: not-allowed;
+        }
+        
+        .status-box {
+            background-color: #444;
+            color: #0f0;
+            font-family: monospace;
+            padding: 10px;
+            border-radius: 4px;
+            min-height: 20px;
+            user-select: none;
+            margin-top: 0.5rem;
+        }
+        
+        .button-container {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .video-container {
+            width: 100%;
+            aspect-ratio: 4/3;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .video-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .empty-feed {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: white;
+            font-size: 1.2rem;
+        }
+        
+        .progress-container {
+            width: 100%;
+            height: 20px;
+            background-color: var(--border-color);
+            border-radius: 10px;
+            margin: 1rem 0;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background-color: var(--success-color);
+            transition: width 0.5s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        
+        .log-container {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #f8f8f8;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.5rem;
+            font-family: monospace;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+        }
+        
+        .log-entry {
+            margin-bottom: 0.5rem;
+            border-bottom: 1px dashed #eee;
+            padding-bottom: 0.5rem;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 1rem;
+            background-color: var(--primary-color);
+            color: white;
+            margin-top: 2rem;
+        }
+        
+        .parameter-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-indicator.on {
+            background-color: var(--success-color);
+        }
+        
+        .status-indicator.off {
+            background-color: var(--error-color);
+        }
+        
+        .status-indicator.training {
+            background-color: var(--warning-color);
+        }
+        
+        /* Important: Fix for reveal.js container */
+        .reveal {
+            height: 500px;
+            position: relative;
+        }
+        
+        .reveal .slides {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .reveal section {
+            height: 100%;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        /* Rotatable elements */
+        .rotatable {
+            transition: all 0.5s ease-in-out;
+        }
+        
+        /* Detection status overlay */
+        .detection-status-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 250px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 1000;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+            
+            .wide-card {
+                grid-column: span 1;
+            }
+            
+            .parameter-group {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
     <header>
-        <h1>Machine Learning Project</h1>
-        <p>A web-based interface for our ML application</p>
+        <h1>Gesture Recognition ML Project</h1>
+        <p>Neural Network Training and Testing Interface</p>
     </header>
 
     <div class="container">
+        <!-- Training Card -->
         <div class="card">
-            <h2>Input Parameters</h2>
+            <h2>Network Training</h2>
             <div class="input-section">
-                <label for="parameter1">Parameter 1:</label>
-                <input type="text" id="parameter1" name="parameter1">
+                <div class="parameter-group">
+                    <div>
+                        <label for="epochs">Epochs:</label>
+                        <input type="number" id="epochs" name="epochs" value="500" min="1" max="10000">
+                    </div>
+                    <div>
+                        <label for="batchSize">Batch Size:</label>
+                        <input type="number" id="batchSize" name="batchSize" value="16" min="1" max="128">
+                    </div>
+                </div>
                 
-                <label for="parameter2">Parameter 2:</label>
-                <input type="number" id="parameter2" name="parameter2">
+                <div class="parameter-group">
+                    <div>
+                        <label for="learningRate">Learning Rate:</label>
+                        <input type="number" id="learningRate" name="learningRate" value="0.0005" min="0.00001" max="0.1" step="0.0001">
+                    </div>
+                    <div>
+                        <label for="bufferSize">Buffer Size:</label>
+                        <input type="number" id="bufferSize" name="bufferSize" value="7" min="1" max="30">
+                    </div>
+                </div>
                 
-                <label for="parameter3">Parameter 3:</label>
-                <select id="parameter3" name="parameter3">
-                    <option value="option1">Option 1</option>
-                    <option value="option2">Option 2</option>
-                    <option value="option3">Option 3</option>
-                </select>
+                <div class="button-container">
+                    <button id="trainBtn">Train Network</button>
+                </div>
                 
-                <button id="submitBtn">Process Data</button>
+                <div id="trainingProgress" class="progress-container" style="display: none;">
+                    <div id="progressBar" class="progress-bar" style="width: 0%">0%</div>
+                </div>
+                
+                <h3>Training Log</h3>
+                <div id="trainingLog" class="log-container">
+                    <div class="log-entry">Training not started yet.</div>
+                </div>
             </div>
         </div>
         
+        <!-- Detection Card -->
         <div class="card">
+            <h2>Gesture Detection</h2>
+            <div class="video-container">
+                <div id="videoPlaceholder" class="empty-feed">
+                    <div>Start detection to view camera feed</div>
+                </div>
+                <img id="videoFeed" class="video-feed" style="display: none;">
+            </div>
+            
+            <div style="margin-top: 1rem;">
+                <div>
+                    <label>Detection Status: 
+                        <span id="detectionStatus">Inactive</span>
+                        <span id="statusIndicator" class="status-indicator off"></span>
+                    </label>
+                </div>
+                
+                <div style="margin-top: 0.5rem;">
+                    <label>Current Gesture:</label>
+                    <div id="detectionGesture" class="status-box">No gesture detected</div>
+                </div>
+                
+                <div class="button-container">
+                    <button id="startDetectionBtn">Start Detection</button>
+                    <button id="stopDetectionBtn" disabled>Stop Detection</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Results Card -->
+        <div class="card wide-card">
             <h2>Results</h2>
-            <div class="output-section">
-                <div class="result" id="resultDisplay">
-                    Results will appear here after processing.
+            <div id="resultsSection">
+                <div id="modelStatus">
+                    <p>Model Status: <span id="modelStatusText">Not Loaded</span></p>
+                </div>
+                
+                <div id="trainingResults" style="display: none;">
+                    <h3>Latest Training Results</h3>
+                    <p>Training Accuracy: <span id="trainAccuracy">-</span></p>
+                    <p>Test Accuracy: <span id="testAccuracy">-</span></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Embedded RevealJS Presentation -->
+        <div class="card wide-card">
+            <h2>Gesture-Controlled Demo</h2>
+            <p>Control the presentation with hand gestures:</p>
+            <ul>
+                <li>Rotate gesture: Rotate images on slides</li>
+                <li>Swipe Left: Next slide</li>
+                <li>Swipe Right: Previous slide</li>
+            </ul>
+            
+            <!-- Detection Status Overlay -->
+            <div class="detection-status-container">
+                <h3>Gesture Detection</h3>
+                <div id="presentation-detection-status" class="status-box">No gesture detected</div>
+            </div>
+            
+            <!-- Direct embedding of RevealJS presentation -->
+            <div class="reveal">
+                <div class="slides">
+                    <section>
+                        <h2>Hello There</h2>
+                        <p>This is a simple RevealJS presentation embedded in the page.</p>
+                        <p>Use hand gestures to control it!</p>
+                    </section>
+                    
+                    <section>
+                        <h2>Rotation Demo</h2>
+                        <div class="rotatable" style="width: 200px; height: 200px; background-color: #3498db; border-radius: 5px;"></div>
+                        <p>Use the rotate gesture to spin this box</p>
+                    </section>
+                    
+                    <section>
+                        <h2>Navigation</h2>
+                        <ul>
+                            <li>Swipe Left: Next slide</li>
+                            <li>Swipe Right: Previous slide</li>
+                            <li>Rotate: Rotate elements</li>
+                        </ul>
+                    </section>
+                    
+                    <section>
+                        <h2>Multiple Elements</h2>
+                        <div style="display: flex; gap: 20px;">
+                            <div class="rotatable" style="width: 100px; height: 100px; background-color: #e74c3c;"></div>
+                            <div class="rotatable" style="width: 100px; height: 100px; background-color: #2ecc71;"></div>
+                            <div class="rotatable" style="width: 100px; height: 100px; background-color: #f39c12;"></div>
+                        </div>
+                        <p>All of these can be rotated at once</p>
+                    </section>
+                    
+                    <section>
+                        <h2>Simple Slide</h2>
+                        <p>This is a simple slide with text only.</p>
+                        <p>Gesture recognition works on all slides.</p>
+                    </section>
                 </div>
             </div>
         </div>
     </div>
 
     <footer>
-        <p>ML Project &copy; 2025</p>
+        <p>ML Gesture Recognition Project &copy; 2025</p>
     </footer>
 
-    <script src="script.js"></script>
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    
+    <!-- RevealJS Scripts - USING ABSOLUTE PATHS -->
+    <script src="/RevealJS/reveal.js-master/dist/reveal.js"></script>
+    
+    <!-- Main Script -->
+    <script>
+        // Initialize Reveal.js with minimal configuration
+        Reveal.initialize({
+            controls: true,
+            progress: true,
+            center: true,
+            hash: true
+        });
+        
+        // Connect to Socket.IO
+        const socket = io();
+        
+        // UI Elements
+        const statusElement = document.getElementById('detectionGesture');
+        const presentationStatusElement = document.getElementById('presentation-detection-status');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const detectionStatus = document.getElementById('detectionStatus');
+        const videoFeed = document.getElementById('videoFeed');
+        const videoPlaceholder = document.getElementById('videoPlaceholder');
+        const startBtn = document.getElementById('startDetectionBtn');
+        const stopBtn = document.getElementById('stopDetectionBtn');
+        const trainBtn = document.getElementById('trainBtn');
+        const trainingProgress = document.getElementById('trainingProgress');
+        const progressBar = document.getElementById('progressBar');
+        const trainingLog = document.getElementById('trainingLog');
+        const modelStatusText = document.getElementById('modelStatusText');
+        const trainingResults = document.getElementById('trainingResults');
+        const trainAccuracy = document.getElementById('trainAccuracy');
+        const testAccuracy = document.getElementById('testAccuracy');
+        
+        // Get training parameter elements
+        const epochs = document.getElementById('epochs');
+        const batchSize = document.getElementById('batchSize');
+        const learningRate = document.getElementById('learningRate');
+        const bufferSize = document.getElementById('bufferSize');
+        
+        // Handle rotation function for RevealJS
+        function rotateImages() {
+            const currentSlide = Reveal.getCurrentSlide();
+            const rotatables = currentSlide.querySelectorAll('.rotatable');
+            
+            rotatables.forEach(element => {
+                // Get current rotation or start at 0
+                const currentRotation = element.style.transform 
+                    ? parseInt(element.style.transform.replace('rotate(', '').replace('deg)', '')) || 0
+                    : 0;
+                
+                // Add 30 degrees rotation
+                element.style.transform = `rotate(${currentRotation + 30}deg)`;
+            });
+        }
+        
+        // Update the detection status
+        function updateStatus(gesture) {
+            if (statusElement) {
+                // Format the gesture name for display
+                let displayText = gesture;
+                if (gesture === 'idle') {
+                    displayText = 'No gesture detected';
+                    statusElement.style.color = "#888888";
+                } else if (gesture.includes("rotate")) {
+                    displayText = 'Rotating';
+                    statusElement.style.color = "#00ff00";
+                } else if (gesture.includes("swipe_left")) {
+                    displayText = 'Swiping Left';
+                    statusElement.style.color = "#00ff00";
+                } else if (gesture.includes("swipe_right")) {
+                    displayText = 'Swiping Right';
+                    statusElement.style.color = "#00ff00";
+                } else {
+                    statusElement.style.color = "#ffff00";
+                }
+                
+                statusElement.textContent = displayText;
+                
+                // Also update presentation status element
+                if (presentationStatusElement) {
+                    presentationStatusElement.textContent = displayText;
+                    presentationStatusElement.style.color = statusElement.style.color;
+                }
+            }
+        }
+        
+        // Add a log entry
+        function addLogEntry(message) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = message;
+            trainingLog.appendChild(entry);
+            
+            // Scroll to bottom
+            trainingLog.scrollTop = trainingLog.scrollHeight;
+        }
+        
+        // Handle start detection button
+        startBtn.addEventListener('click', function() {
+            socket.emit('start_detection', {}, function(response) {
+                console.log('Start detection response:', response);
+                if (response.status === 'started') {
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    detectionStatus.textContent = 'Active';
+                    statusIndicator.className = 'status-indicator on';
+                    videoPlaceholder.style.display = 'none';
+                    videoFeed.style.display = 'block';
+                } else if (response.status === 'error') {
+                    alert('Error: ' + response.message);
+                }
+            });
+        });
+        
+        // Handle stop detection button
+        stopBtn.addEventListener('click', function() {
+            socket.emit('stop_detection', {}, function(response) {
+                console.log('Stop detection response:', response);
+                if (response.status === 'stopped') {
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+                    detectionStatus.textContent = 'Inactive';
+                    statusIndicator.className = 'status-indicator off';
+                    updateStatus('idle');
+                    videoFeed.style.display = 'none';
+                    videoPlaceholder.style.display = 'flex';
+                }
+            });
+        });
+        
+        // Handle train button
+        trainBtn.addEventListener('click', function() {
+            // Get training parameters
+            const params = {
+                epochs: parseInt(epochs.value),
+                batch_size: parseInt(batchSize.value),
+                learning_rate: parseFloat(learningRate.value),
+                buffer_size: parseInt(bufferSize.value)
+            };
+            
+            // Validate parameters
+            if (isNaN(params.epochs) || params.epochs < 1) {
+                alert('Please enter a valid number of epochs (minimum 1)');
+                return;
+            }
+            
+            if (isNaN(params.batch_size) || params.batch_size < 1) {
+                alert('Please enter a valid batch size (minimum 1)');
+                return;
+            }
+            
+            if (isNaN(params.learning_rate) || params.learning_rate <= 0) {
+                alert('Please enter a valid learning rate (greater than 0)');
+                return;
+            }
+            
+            // Confirm with user
+            if (!confirm(`Start training with the following parameters?
+- Epochs: ${params.epochs}
+- Batch Size: ${params.batch_size}
+- Learning Rate: ${params.learning_rate}
+- Buffer Size: ${params.buffer_size}
+
+This will take some time.`)) {
+                return;
+            }
+            
+            // Disable button and show progress
+            trainBtn.disabled = true;
+            trainingProgress.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+            
+            // Clear log
+            trainingLog.innerHTML = '';
+            addLogEntry('Starting training...');
+            
+            // Update status
+            modelStatusText.textContent = 'Training...';
+            statusIndicator.className = 'status-indicator training';
+            
+            // Send request to server
+            fetch('/start_training', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(params)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Training started:', data);
+                if (data.status !== 'success') {
+                    addLogEntry('Error: ' + data.message);
+                    trainBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error starting training:', error);
+                addLogEntry('Error starting training: ' + error.message);
+                trainBtn.disabled = false;
+                trainingProgress.style.display = 'none';
+            });
+        });
+        
+        // Listen for video feed updates
+        socket.on('video_feed', function(data) {
+            videoFeed.src = data.image;
+        });
+        
+        // Listen for gesture updates
+        socket.on('gesture_update', function(data) {
+            updateStatus(data.gesture);
+        });
+        
+        // Listen for gesture events to control presentation
+        socket.on('gesture', function(data) {
+            console.log('Gesture event received:', data.gesture);
+            
+            switch(data.gesture) {
+                case 'rotate':
+                    rotateImages();
+                    break;
+                case 'swipe_left':
+                    Reveal.right();  // Move to next slide
+                    break;
+                case 'swipe_right':
+                    Reveal.left();   // Move to previous slide
+                    break;
+            }
+        });
+        
+        // Listen for training log updates
+        socket.on('training_log', function(data) {
+            addLogEntry(data.message);
+        });
+        
+        // Listen for training progress updates
+        socket.on('training_update', function(data) {
+            progressBar.style.width = data.progress + '%';
+            progressBar.textContent = data.progress + '%';
+            
+            // Update epoch information in the progress bar
+            if (data.epoch) {
+                progressBar.textContent = `${data.progress}% - Epoch ${data.epoch}`;
+            }
+        });
+        
+        // Listen for training completion
+        socket.on('training_complete', function(data) {
+            trainBtn.disabled = false;
+            
+            // Update model status
+            modelStatusText.textContent = 'Trained and Loaded';
+            statusIndicator.className = 'status-indicator on';
+            
+            // Show training results
+            trainingResults.style.display = 'block';
+            trainAccuracy.textContent = data.train_accuracy.toFixed(2) + '%';
+            testAccuracy.textContent = data.test_accuracy.toFixed(2) + '%';
+            
+            // Add final log entry
+            addLogEntry('Training complete!');
+        });
+        
+        // Listen for detection stopped
+        socket.on('detection_stopped', function() {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            detectionStatus.textContent = 'Inactive';
+            statusIndicator.className = 'status-indicator off';
+            videoFeed.style.display = 'none';
+            videoPlaceholder.style.display = 'flex';
+        });
+        
+        // Get initial status
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => {
+                // Update detection status
+                if (data.detection_active) {
+                    detectionStatus.textContent = 'Active';
+                    statusIndicator.className = 'status-indicator on';
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    videoPlaceholder.style.display = 'none';
+                    videoFeed.style.display = 'block';
+                } else {
+                    detectionStatus.textContent = 'Inactive';
+                    statusIndicator.className = 'status-indicator off';
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+                }
+                
+                // Update gesture
+                updateStatus(data.current_gesture);
+                
+                // Update training status
+                if (data.training_in_progress) {
+                    trainBtn.disabled = true;
+                    trainingProgress.style.display = 'block';
+                    progressBar.style.width = data.training_progress + '%';
+                    progressBar.textContent = data.training_progress + '%';
+                    modelStatusText.textContent = 'Training...';
+                    statusIndicator.className = 'status-indicator training';
+                } else if (data.model_loaded) {
+                    modelStatusText.textContent = 'Trained and Loaded';
+                    
+                    // Fetch training log
+                    fetch('/training_log')
+                        .then(response => response.json())
+                        .then(logData => {
+                            if (logData.length > 0) {
+                                trainingLog.innerHTML = '';
+                                logData.forEach(entry => {
+                                    addLogEntry(entry.message);
+                                });
+                            }
+                        });
+                } else {
+                    modelStatusText.textContent = 'Not Loaded';
+                }
+            });
+
+        // Add console logs to debug RevealJS initialization
+        console.log("RevealJS initialized:", Reveal);
+        console.log("RevealJS version:", Reveal.VERSION);
+    </script>
 </body>
 </html>
