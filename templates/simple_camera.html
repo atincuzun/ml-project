@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}Simple Camera{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Simple Camera View</h2>
+    
+	<div class="controls">
+		<button id="refreshCamerasBtn">Refresh Cameras</button>
+		<select id="cameraSelect">
+			<option value="">Loading cameras...</option>
+		</select>
+		<button id="startCameraBtn">Start Camera</button>
+		<button id="stopCameraBtn">Stop Camera</button>
+		<label class="toggle-switch">
+			<input type="checkbox" id="togglePose">
+			<span class="toggle-slider"></span>
+			<span class="toggle-label">Enable Pose Detection</span>
+		</label>
+	</div>
+    
+    <div id="videoContainer">
+        <img id="cameraFeed" src="{{ url_for('static', filename='img/camera-placeholder.jpg') }}">
+    </div>
+    
+    <div id="infoBar" class="info-bar">Camera ready</div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+	.toggle-switch {
+		position: relative;
+		display: inline-block;
+		width: 60px;
+		height: 34px;
+		margin-left: 10px;
+		vertical-align: middle;
+	}
+
+	.toggle-switch input {
+		opacity: 0;
+		width: 0;
+		height: 0;
+	}
+
+	.toggle-slider {
+		position: absolute;
+		cursor: pointer;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: #ccc;
+		transition: .4s;
+		border-radius: 34px;
+	}
+
+	.toggle-slider:before {
+		position: absolute;
+		content: "";
+		height: 26px;
+		width: 26px;
+		left: 4px;
+		bottom: 4px;
+		background-color: white;
+		transition: .4s;
+		border-radius: 50%;
+	}
+
+	input:checked + .toggle-slider {
+		background-color: #2196F3;
+	}
+
+	input:checked + .toggle-slider:before {
+		transform: translateX(26px);
+	}
+
+	.toggle-label {
+		margin-left: 70px;
+		white-space: nowrap;
+	}
+    .controls {
+        margin-bottom: 15px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+    }
+    
+    button {
+        padding: 8px 16px;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    
+    button:hover {
+        background-color: #45a049;
+    }
+    
+    #refreshCamerasBtn {
+        background-color: #2196F3;
+    }
+    
+    #stopCameraBtn {
+        background-color: #f44336;
+    }
+    
+    #videoContainer {
+        width: 100%;
+        background-color: #000;
+        overflow: hidden;
+        border-radius: 4px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        margin-bottom: 20px;
+    }
+    
+    #cameraFeed {
+        width: 100%;
+        display: block;
+    }
+    
+    .info-bar {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+    
+    select {
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        min-width: 150px;
+    }
+    
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
+    const startCameraBtn = document.getElementById('startCameraBtn');
+    const stopCameraBtn = document.getElementById('stopCameraBtn');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const cameraFeed = document.getElementById('cameraFeed');
+    const videoContainer = document.getElementById('videoContainer');
+    const infoBar = document.getElementById('infoBar');
+
+    let selectedCamera = 0;
+    let isStreaming = false;
+    let cameraInfo = null;
+    
+    fetchCameras();
+
+    refreshCamerasBtn.addEventListener('click', fetchCameras);
+    cameraSelect.addEventListener('change', function() {
+        selectedCamera = parseInt(cameraSelect.value);
+        console.log('Camera selected:', selectedCamera);
+        getCameraInfo(selectedCamera);
+    });
+    startCameraBtn.addEventListener('click', startCamera);
+    stopCameraBtn.addEventListener('click', stopCamera);
+
+    async function fetchCameras() {
+        try {
+            infoBar.textContent = "Searching for cameras...";
+            
+            const response = await fetch('/get_cameras');
+            const cameras = await response.json();
+
+            cameraSelect.innerHTML = '';
+            if (cameras.length === 0) {
+                cameraSelect.innerHTML = '<option value="">No cameras found</option>';
+                infoBar.textContent = "No cameras detected.";
+            } else {
+                cameras.forEach(camera => {
+                    const option = document.createElement('option');
+                    option.value = camera.id;
+                    option.textContent = camera.name;
+                    cameraSelect.appendChild(option);
+                });
+
+                selectedCamera = parseInt(cameras[0].id);
+                cameraSelect.value = selectedCamera;
+                
+                infoBar.textContent = `Found ${cameras.length} camera(s). Select one and press Start Camera.`;
+                
+                // Get info for the first camera
+                getCameraInfo(selectedCamera);
+            }
+        } catch (error) {
+            console.error('Error fetching cameras:', error);
+            infoBar.textContent = "Error searching for cameras: " + error.message;
+        }
+    }
+    
+    async function getCameraInfo(cameraId) {
+        try {
+            infoBar.textContent = `Getting information for camera ${cameraId}...`;
+            
+            const response = await fetch(`/get_camera_info?camera_id=${cameraId}`);
+            const info = await response.json();
+            
+            if (info.success) {
+                cameraInfo = info;
+                infoBar.textContent = `Camera info: ${info.width}x${info.height} (${info.aspectRatio.toFixed(2)}:1)`;
+                console.log("Camera info:", cameraInfo);
+            } else {
+                infoBar.textContent = `Error getting camera info: ${info.message}`;
+                console.error("Failed to get camera info:", info.message);
+            }
+        } catch (error) {
+            console.error('Error getting camera info:', error);
+            infoBar.textContent = `Error getting camera info: ${error.message}`;
+        }
+    }
+
+    function startCamera() {
+        if (isStreaming) return;
+        
+        stopCamera();
+        infoBar.textContent = `Starting camera ${selectedCamera}...`;
+        
+        const timestamp = Date.now();
+        const streamUrl = `/simple_camera_feed?camera_id=${selectedCamera}&t=${timestamp}`;
+        cameraFeed.src = streamUrl;
+        
+        // Apply aspect ratio if available
+        if (cameraInfo && cameraInfo.aspectRatio) {
+            // This ensures the container maintains the correct aspect ratio
+            // by using the padding-bottom trick
+            const paddingPercentage = (1 / cameraInfo.aspectRatio) * 100;
+            videoContainer.style.position = 'relative';
+            videoContainer.style.height = '0';
+            videoContainer.style.paddingBottom = `${paddingPercentage}%`;
+            
+            // Position the image to fill the container
+            cameraFeed.style.position = 'absolute';
+            cameraFeed.style.top = '0';
+            cameraFeed.style.left = '0';
+            cameraFeed.style.width = '100%';
+            cameraFeed.style.height = '100%';
+            cameraFeed.style.objectFit = 'fill'; // Use 'fill' to stretch to container
+        }
+        
+        isStreaming = true;
+    }
+
+    function stopCamera() {
+        if (!isStreaming) return;
+        
+        cameraFeed.src = '{{ url_for("static", filename="img/camera-placeholder.jpg") }}';
+        
+        // Reset styles
+        videoContainer.style.position = '';
+        videoContainer.style.height = '';
+        videoContainer.style.paddingBottom = '';
+        
+        cameraFeed.style.position = '';
+        cameraFeed.style.top = '';
+        cameraFeed.style.left = '';
+        cameraFeed.style.height = '';
+        cameraFeed.style.objectFit = '';
+        
+        isStreaming = false;
+        infoBar.textContent = "Camera stopped.";
+    }
+
+    // Handle load event if needed
+    cameraFeed.addEventListener('load', function() {
+        if (isStreaming) {
+            infoBar.textContent = `Streaming: ${cameraInfo ? cameraInfo.width + 'x' + cameraInfo.height : 'unknown resolution'}`;
+        }
+    });
+
+    // Handle errors
+    cameraFeed.addEventListener('error', function() {
+        if (isStreaming) {
+            infoBar.textContent = "Error loading camera stream. Try a different camera.";
+            stopCamera();
+        }
+    });
+});
+</script>
+{% endblock %}
