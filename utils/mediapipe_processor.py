@@ -71,6 +71,7 @@ class MediapipeProcessor:
 		
 		# Draw pose landmarks if detected
 		if results.pose_landmarks:
+			# Draw landmarks on the original image for better visibility
 			self.mp_drawing.draw_landmarks(
 				image_bgr,
 				results.pose_landmarks,
@@ -107,7 +108,10 @@ class MediapipeProcessor:
 		if not success:
 			return None, None, "idle", False
 		
+		# Process frame and get the frame with landmarks drawn directly on it
 		processed_frame, pose_frame, gesture = self.process_frame(frame)
+		
+		# For video processing, we want to return the frame with landmarks directly drawn on it
 		return processed_frame, pose_frame, gesture, True
 	
 	def get_current_video_timestamp(self):

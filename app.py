@@ -210,6 +210,7 @@ def video_process_feed():
         success = True
         
         while success:
+            # Get the processed frame with MediaPipe landmarks already drawn on it
             processed_frame, pose_frame, gesture, success = processor.get_next_video_frame()
             
             if not success:
@@ -220,12 +221,12 @@ def video_process_feed():
                 timestamp = processor.get_current_video_timestamp()
                 data_handler.add_frame(processor.last_pose_data, timestamp, gesture)
             
-            # Encode the frames
+            # Encode the frames - we only need the processed frame with landmarks
             ret, buffer_original = cv2.imencode('.jpg', processed_frame)
-            ret, buffer_pose = cv2.imencode('.jpg', pose_frame)
+            ret, buffer_pose = cv2.imencode('.jpg', pose_frame)  # Keep for compatibility
             
             # Combine frames with a delimiter for frontend to split
-            combined_data = buffer_original.tobytes() + b"FRAME_DELIMITER" + buffer_pose.tobytes() + b"FRAME_DELIMITER"
+            combined_data = buffer_original.tobytes() + b"FRAME_DELIMITER" + buffer_original.tobytes() + b"FRAME_DELIMITER"
             
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + combined_data + b'\r\n')
@@ -490,13 +491,16 @@ def get_camera_info():
             'success': False,
             'message': str(e)
         })
-    
+
+
 if __name__ == '__main__':
-    # Open browser tab after a small delay
-    Timer(1.0, open_browser).start()
-    
     # Create upload folder if it doesn't exist
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
     
+    # Check if we're in the reloader process to prevent opening the browser twice
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        Timer(1.0, open_browser).start()
+    
+    # todo: Turn off once finished
     app.run(debug=True)

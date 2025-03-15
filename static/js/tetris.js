@@ -5,8 +5,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const scoreElement = document.getElementById('score');
     const linesElement = document.getElementById('lines');
     const levelElement = document.getElementById('level');
-    const gestureText = document.getElementById('gestureText');
     const gestureIcon = document.getElementById('gestureIcon');
+    const gestureText = document.getElementById('gestureText');
     const startGameBtn = document.getElementById('startGameBtn');
     const pauseGameBtn = document.getElementById('pauseGameBtn');
     const restartGameBtn = document.getElementById('restartGameBtn');
@@ -19,6 +19,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Canvas contexts
     const ctx = tetrisCanvas.getContext('2d');
     const nextCtx = nextPieceCanvas.getContext('2d');
+
+    // Gesture icons
+    const gestureIcons = {
+        'swipe_left': '/static/img/swipe_left.png',
+        'swipe_right': '/static/img/swipe_right.png',
+        'rotate_cw': '/static/img/rotate_cw.png',
+        'rotate_ccw': '/static/img/rotate_ccw.png'
+    };
 
     // Game constants
     const ROWS = 20;
@@ -451,18 +459,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateGestureDisplay(gesture) {
-        // Update the gesture indicator
-        if (gesture === 'idle' || !gesture) {
+        if (gesture === 'idle' || !gestureIcons[gesture]) {
+            // Set default appearance for idle or unknown gestures
+            gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
             gestureIcon.style.backgroundColor = '#f4f4f4';
-            gestureText.textContent = 'No gesture';
         } else {
+            // Use gesture icon images
+            gestureIcon.innerHTML = `
+                <img src="${gestureIcons[gesture]}" alt="${formatGestureName(gesture)}" style="width: 80px; height: 80px;">
+                <span id="gestureText">${formatGestureName(gesture)}</span>
+            `;
             gestureIcon.style.backgroundColor = '#3498db';
-            gestureText.textContent = formatGestureName(gesture);
 
             // Flash effect
             setTimeout(() => {
+                gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
                 gestureIcon.style.backgroundColor = '#f4f4f4';
-                gestureText.textContent = 'No gesture';
             }, 1000);
         }
     }

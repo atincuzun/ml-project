@@ -62,25 +62,63 @@ To add RevealJS presentations:
 ## Project Structure
 
 ```
-gesture-control-app/
+ml-project/
+├── Data/
+│   └── MediaPipeCSVReader.py
+├── Network/
+│   └── GestureClassificationNetwork.py
+├── WebInterface/
+│   ├── index.html
+│   ├── script.js
+│   └── styles.css
+├── Visualization/
+│   ├── ConfusionMatrix.py
+│   └── CostFunction.py
 ├── static/
-│   ├── css/           # CSS stylesheets
-│   ├── js/            # JavaScript files
-│   ├── img/           # Images and icons
-│   └── presentations/ # RevealJS presentations
-│
-├── templates/         # HTML templates
-│
-├── utils/             # Utility modules
+│   ├── css/
+│   │   ├── main.css
+│   │   ├── presentation.css
+│   │   ├── tetris.css
+│   │   ├── video.css
+│   │   └── webcam.css
+│   ├── img/
+│   │   ├── camera-placeholder.jpg
+│   │   ├── pose-placeholder.jpg
+│   │   └── video-placeholder.jpg
+│   ├── js/
+│   │   ├── navigation.js
+│   │   ├── presentation.js
+│   │   ├── presentation-controller.js
+│   │   ├── tetris.js
+│   │   ├── video.js
+│   │   └── webcam.js
+│   └── presentations/
+│       └── (presentation files and directories)
+├── templates/
+│   ├── base.html
+│   ├── presentation.html
+│   ├── simple_camera.html
+│   ├── tetris.html
+│   ├── video.html
+│   └── webcam.html
+├── uploads/
+│   └── (uploaded video files)
+├── utils/
 │   ├── __init__.py
-│   ├── mediapipe_processor.py
-│   └── data_handler.py
-│
-├── uploads/           # Directory for uploaded videos
-├── app.py             # Main Flask application
-├── config.py          # Configuration settings
-├── keypoint_mapping.yml # MediaPipe keypoint definitions
-└── requirements.txt   # Dependencies
+│   ├── data_handler.py
+│   ├── gesture_recognition.py
+│   └── mediapipe_processor.py
+├── app.py
+├── config.py
+├── gesture_classifier_main.py
+├── gesture_model.npy
+├── keypoint_mapping.yml
+├── main.py
+├── MLproject.py
+├── README.md
+├── requirements.txt
+├── rotation_model.npy
+└── test.py
 ```
 
 ## Requirements

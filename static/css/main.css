@@ -136,14 +136,29 @@ h2 {
     width: 150px;
     height: 150px;
     background-color: #f4f4f4;
-    border-radius: 50%;
+    border-radius: 10px;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     margin: 0 auto;
     font-size: 1.2rem;
     font-weight: bold;
     transition: all 0.3s;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+}
+
+.gesture-icon img {
+    max-width: 80px;
+    max-height: 80px;
+    margin-bottom: 10px;
+}
+
+#gestureText {
+    text-align: center;
+    margin-top: 5px;
+    font-size: 14px;
 }
 
 .log-container {

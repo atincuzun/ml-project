@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveLogBtn = document.getElementById('saveLogBtn');
     const cameraSelect = document.getElementById('cameraSelect');
     const cameraImage = document.getElementById('cameraImage');
-    const poseImage = document.getElementById('poseImage');
     const gestureIcon = document.getElementById('gestureIcon');
     const gestureText = document.getElementById('gestureText');
     const logOutput = document.getElementById('logOutput');
@@ -24,6 +23,14 @@ document.addEventListener('DOMContentLoaded', function() {
     let logData = '';
     let lastGestureTime = 0;
     const GESTURE_COOLDOWN = 1000; // 1 second cooldown between gesture simulations
+
+    // Gesture icons
+    const gestureIcons = {
+        'swipe_left': '/static/img/swipe_left.png',
+        'swipe_right': '/static/img/swipe_right.png',
+        'rotate_cw': '/static/img/rotate_cw.png',
+        'rotate_ccw': '/static/img/rotate_ccw.png'
+    };
 
     // Load available cameras
     fetchCameras();
@@ -177,17 +184,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateGestureDisplay(gesture) {
-        if (gesture === 'idle') {
+        if (gesture === 'idle' || !gestureIcons[gesture]) {
+            // Set default appearance for idle or unknown gestures
+            gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
             gestureIcon.style.backgroundColor = '#f4f4f4';
-            gestureText.textContent = 'No gesture';
         } else {
+            // Use gesture icon images
+            gestureIcon.innerHTML = `
+                <img src="${gestureIcons[gesture]}" alt="${formatGestureName(gesture)}" style="width: 80px; height: 80px;">
+                <span id="gestureText">${formatGestureName(gesture)}</span>
+            `;
             gestureIcon.style.backgroundColor = '#3498db';
-            gestureText.textContent = formatGestureName(gesture);
 
             // Flash effect
             setTimeout(() => {
+                gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
                 gestureIcon.style.backgroundColor = '#f4f4f4';
-                gestureText.textContent = 'No gesture';
             }, 1000);
         }
     }

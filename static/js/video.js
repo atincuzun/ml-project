@@ -6,7 +6,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const videoFileInput = document.getElementById('videoFileInput');
     const selectedVideo = document.getElementById('selectedVideo');
     const videoImage = document.getElementById('videoImage');
-    const poseImage = document.getElementById('poseImage');
     const gestureIcon = document.getElementById('gestureIcon');
     const gestureText = document.getElementById('gestureText');
     const logOutput = document.getElementById('logOutput');
@@ -23,6 +22,14 @@ document.addEventListener('DOMContentLoaded', function() {
     let isVideoPlaying = false;
     let videoEventSource = null;
 
+    // Gesture icons
+    const gestureIcons = {
+        'swipe_left': '/static/img/swipe_left.png',
+        'swipe_right': '/static/img/swipe_right.png',
+        'rotate_cw': '/static/img/rotate_cw.png',
+        'rotate_ccw': '/static/img/rotate_ccw.png'
+    };
+
     // Event listeners
     selectVideoBtn.addEventListener('click', () => {
         videoFileInput.click();
@@ -32,11 +39,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target.files.length > 0) {
             selectedVideoFile = e.target.files[0];
             selectedVideo.textContent = selectedVideoFile.name;
-            startVideoBtn.disabled = false;
 
-            // Display first frame in preview
-            const objectUrl = URL.createObjectURL(selectedVideoFile);
-            videoImage.src = objectUrl;
+            // Automatically process the video when selected
+            processVideo();
         }
     });
 
@@ -45,7 +50,7 @@ document.addEventListener('DOMContentLoaded', function() {
             stopVideo();
             startVideoBtn.textContent = 'Start Video';
         } else {
-            processAndStartVideo();
+            startVideoPlayback();
             startVideoBtn.textContent = 'Stop Video';
         }
     });
@@ -63,8 +68,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Functions
-    async function processAndStartVideo() {
-        if (!selectedVideoFile) return;
+    async function processVideo() {
+        if (!selectedVideoFile || isProcessing) return;
+
+        isProcessing = true;
 
         // Show progress modal
         progressModal.style.display = 'flex';
@@ -92,16 +99,20 @@ document.addEventListener('DOMContentLoaded', function() {
             progressBar.style.width = '100%';
             progressText.textContent = 'Processing complete!';
 
-            // Start playing the processed video
+            // Enable start button
+            startVideoBtn.disabled = false;
+
+            // Update progress modal
             setTimeout(() => {
                 progressModal.style.display = 'none';
-                startVideoPlayback();
+                isProcessing = false;
             }, 1000);
 
         } catch (error) {
             console.error('Error processing video:', error);
             progressModal.style.display = 'none';
-            alert('Error processing video');
+            alert('Error processing video: ' + error.message);
+            isProcessing = false;
         }
     }
 
@@ -136,17 +147,13 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         videoEventSource.onmessage = function(event) {
-            // Split the combined data (original image, pose image, gesture data)
+            // Split the combined data (original image, pose image)
             const parts = event.data.split('FRAME_DELIMITER');
 
             if (parts.length >= 3) {
-                // Handle original image
-                const originalImageBlob = new Blob([parts[0]], { type: 'image/jpeg' });
-                videoImage.src = URL.createObjectURL(originalImageBlob);
-
-                // Handle pose image
-                const poseImageBlob = new Blob([parts[1]], { type: 'image/jpeg' });
-                poseImage.src = URL.createObjectURL(poseImageBlob);
+                // Handle original image (which should now contain MediaPipe landmarks)
+                const imageBlob = new Blob([parts[0]], { type: 'image/jpeg' });
+                videoImage.src = URL.createObjectURL(imageBlob);
             }
         };
 
@@ -203,17 +210,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateGestureDisplay(gesture) {
-        if (gesture === 'idle') {
+        if (gesture === 'idle' || !gestureIcons[gesture]) {
+            // Set default appearance for idle or unknown gestures
+            gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
             gestureIcon.style.backgroundColor = '#f4f4f4';
-            gestureText.textContent = 'No gesture';
         } else {
+            // Use gesture icon images
+            gestureIcon.innerHTML = `
+                <img src="${gestureIcons[gesture]}" alt="${formatGestureName(gesture)}" style="width: 80px; height: 80px;">
+                <span id="gestureText">${formatGestureName(gesture)}</span>
+            `;
             gestureIcon.style.backgroundColor = '#3498db';
-            gestureText.textContent = formatGestureName(gesture);
 
             // Flash effect
             setTimeout(() => {
+                gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
                 gestureIcon.style.backgroundColor = '#f4f4f4';
-                gestureText.textContent = 'No gesture';
             }, 1000);
         }
     }

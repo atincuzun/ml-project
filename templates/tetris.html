@@ -8,55 +8,85 @@
 
 {% block content %}
 <div class="tetris-container">
-    <div class="game-area">
-        <canvas id="tetris" width="240" height="400"></canvas>
-        
-        <div class="game-sidebar">
-            <div class="next-piece-container">
-                <h3>Next Piece</h3>
-                <canvas id="nextPiece" width="80" height="80"></canvas>
-            </div>
-            
-            <div class="score-container">
-                <h3>Score</h3>
-                <div id="score">0</div>
-                
-                <h3>Lines</h3>
-                <div id="lines">0</div>
-                
-                <h3>Level</h3>
-                <div id="level">1</div>
-            </div>
-            
-            <div class="controls-info">
-                <h3>Controls</h3>
-                <ul>
-                    <li>← / → : Move left/right</li>
-                    <li>↑ : Rotate clockwise</li>
-                    <li>↓ : Soft drop</li>
-                    <li>Space : Hard drop</li>
-                </ul>
-            </div>
-            
-            <div class="gesture-display">
+    <div class="three-column-layout">
+        <!-- Column 1: Gesture Information and Webcam -->
+        <div class="column gesture-column">
+            <!-- Gesture Display -->
+            <div class="gesture-display-box">
                 <h3>Detected Gesture</h3>
                 <div id="gestureIcon" class="gesture-icon">
                     <span id="gestureText">No gesture</span>
                 </div>
             </div>
+
+            <!-- Webcam Feed -->
+            <div class="webcam-box">
+                <h3>Webcam</h3>
+                <div class="webcam-preview">
+                    <img id="webcamFeed" src="/video_feed?camera_id=0" alt="Webcam feed">
+                </div>
+            </div>
+
+            <!-- Gesture Controls Information -->
+            <div class="gesture-controls-box">
+                <h3>Gesture Controls</h3>
+                <ul class="gesture-control-list">
+                    <li><strong>Swipe Left:</strong> Move Left</li>
+                    <li><strong>Swipe Right:</strong> Move Right</li>
+                    <li><strong>Rotate Clockwise:</strong> Rotate Clockwise</li>
+                    <li><strong>Rotate Counterclockwise:</strong> Rotate Counterclockwise</li>
+                </ul>
+            </div>
         </div>
-    </div>
-    
-    <div class="game-controls">
-        <button id="startGameBtn">Start Game</button>
-        <button id="pauseGameBtn">Pause</button>
-        <button id="restartGameBtn">Restart</button>
-    </div>
-    
-    <div class="webcam-container">
-        <h3>Gesture Control (Webcam)</h3>
-        <div id="webcamPreview" class="webcam-preview">
-            <img id="webcamFeed" src="/video_feed?camera_id=0" alt="Webcam feed">
+
+        <!-- Column 2: Game and Game Controls -->
+        <div class="column game-column">
+            <!-- Tetris Game Canvas -->
+            <div class="game-canvas-box">
+                <canvas id="tetris" width="200" height="400"></canvas>
+            </div>
+
+            <!-- Game Control Buttons -->
+            <div class="game-controls-box">
+                <div class="game-controls">
+                    <button id="startGameBtn">Start Game</button>
+                    <button id="pauseGameBtn" disabled>Pause</button>
+                    <button id="restartGameBtn">Restart</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 3: Game Info -->
+        <div class="column info-column">
+            <!-- Next Piece Preview -->
+            <div class="next-piece-box">
+                <h3>Next Piece</h3>
+                <canvas id="nextPiece" width="80" height="80"></canvas>
+            </div>
+
+            <!-- Score Information -->
+            <div class="score-box">
+                <h3>Score</h3>
+                <div id="score">0</div>
+
+                <h3>Lines</h3>
+                <div id="lines">0</div>
+
+                <h3>Level</h3>
+                <div id="level">1</div>
+            </div>
+
+            <!-- Keyboard Controls Information -->
+            <div class="keyboard-controls-box">
+                <h3>Keyboard Controls</h3>
+                <ul class="keyboard-control-list">
+                    <li>← / → : Move left/right</li>
+                    <li>↑ : Rotate clockwise</li>
+                    <li>↓ : Soft drop</li>
+                    <li>Space : Hard drop</li>
+                    <li>Z : Rotate counter-clockwise</li>
+                </ul>
+            </div>
         </div>
     </div>
 </div>
