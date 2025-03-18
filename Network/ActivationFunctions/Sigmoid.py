@@ -1,3 +1,7 @@
+import numpy as np
+from Network.ActivationFunctions.Activation import Activation
+
+
 class Sigmoid(Activation):
     """Sigmoid activation function: f(x) = 1 / (1 + exp(-x))"""
     
