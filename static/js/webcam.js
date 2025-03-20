@@ -7,13 +7,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const cameraImage = document.getElementById('cameraImage');
     const gestureIcon = document.getElementById('gestureIcon');
     const gestureText = document.getElementById('gestureText');
-    const logOutput = document.getElementById('logOutput');
     const saveModal = document.getElementById('saveModal');
     const confirmSaveBtn = document.getElementById('confirmSaveBtn');
     const cancelSaveBtn = document.getElementById('cancelSaveBtn');
-    const fileName = document.getElementById('fileName');
-    const filePath = document.getElementById('filePath');
-    const keyboardInfoElement = document.getElementById('keyboardInfo');
 
     // State variables
     let selectedCamera = 0;
@@ -23,14 +19,26 @@ document.addEventListener('DOMContentLoaded', function() {
     let logData = '';
     let lastGestureTime = 0;
     const GESTURE_COOLDOWN = 1000; // 1 second cooldown between gesture simulations
+    let currentTimestamp = 0;
+
+    // Gesture history tracking
+    const gestureHistory = [];
+    const MAX_HISTORY_ITEMS = 5;
+    let gestureDisplayTimeout = null;
+    const GESTURE_DISPLAY_DURATION = 3000; // 3 seconds
 
     // Gesture icons
     const gestureIcons = {
         'swipe_left': '/static/img/swipe_left.png',
         'swipe_right': '/static/img/swipe_right.png',
         'rotate_cw': '/static/img/rotate_cw.png',
-        'rotate_ccw': '/static/img/rotate_ccw.png'
+        'rotate_ccw': '/static/img/rotate_ccw.png',
+        'hand_up': '/static/img/hand_up.png',
+        'hand_down': '/static/img/hand_down.png'
     };
+
+    // Create gesture overlay element
+    createGestureOverlay();
 
     // Load available cameras
     fetchCameras();
@@ -45,14 +53,23 @@ document.addEventListener('DOMContentLoaded', function() {
         eventSource.onmessage = function(event) {
             try {
                 const data = JSON.parse(event.data);
+
+                // Update current timestamp
+                currentTimestamp = Date.now() - logStartTime;
+
                 if (data.gesture !== 'idle') {
+                    // Update the gesture display
                     updateGestureDisplay(data.gesture);
 
-                    // If logging is active, log the gesture
-                    if (isLogging) {
-                        logGesture(data.gesture);
-                    }
+                    // Add to gesture history
+                    addToGestureHistory(data.gesture, currentTimestamp);
+
+                    // Update the gesture history display
+                    updateGestureHistoryDisplay();
                 }
+
+                // Always update the current timestamp display
+                updateTimestampDisplay(currentTimestamp);
             } catch (error) {
                 console.error('Error parsing gesture data:', error);
             }
@@ -103,7 +120,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add keyboard event listener for gesture simulation
     document.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
-            e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.key === 'ArrowUp' || e.key === 'ArrowDown' ||
+            e.key === 'u' || e.key === 'd') {
             // Prevent default behavior for arrow keys
             e.preventDefault();
 
@@ -129,18 +147,117 @@ document.addEventListener('DOMContentLoaded', function() {
                 case 'ArrowDown':
                     gesture = 'rotate_ccw';
                     break;
+                case 'u':
+                    gesture = 'hand_up';
+                    break;
+                case 'd':
+                    gesture = 'hand_down';
+                    break;
             }
 
             if (gesture) {
                 updateGestureDisplay(gesture);
-                if (isLogging) {
-                    logGesture(gesture);
-                }
+                addToGestureHistory(gesture, currentTimestamp);
+                updateGestureHistoryDisplay();
             }
         }
     });
 
     // Functions
+    function createGestureOverlay() {
+        // Create overlay container
+        const overlayContainer = document.createElement('div');
+        overlayContainer.id = 'gestureOverlay';
+        overlayContainer.className = 'gesture-overlay';
+
+        // Create current timestamp display
+        const timestampDisplay = document.createElement('div');
+        timestampDisplay.id = 'currentTimestamp';
+        timestampDisplay.className = 'current-timestamp';
+        timestampDisplay.textContent = 'Time: 0 ms';
+
+        // Create gesture history container
+        const historyContainer = document.createElement('div');
+        historyContainer.id = 'gestureHistory';
+        historyContainer.className = 'gesture-history';
+        historyContainer.innerHTML = '<h4>Recent Gestures</h4><ul></ul>';
+
+        // Add elements to overlay
+        overlayContainer.appendChild(timestampDisplay);
+        overlayContainer.appendChild(historyContainer);
+
+        // Add overlay to the page
+        const container = document.querySelector('.container');
+        container.appendChild(overlayContainer);
+
+        // Add styles for overlay
+        const style = document.createElement('style');
+        style.textContent = `
+            .gesture-overlay {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background-color: rgba(0, 0, 0, 0.7);
+                color: white;
+                padding: 15px;
+                border-radius: 8px;
+                width: 250px;
+                z-index: 1000;
+            }
+            
+            .current-timestamp {
+                font-size: 16px;
+                font-weight: bold;
+                margin-bottom: 10px;
+                text-align: center;
+            }
+            
+            .gesture-history h4 {
+                margin: 0 0 10px 0;
+                text-align: center;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+                padding-bottom: 5px;
+            }
+            
+            .gesture-history ul {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+            }
+            
+            .gesture-history li {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 5px;
+                padding: 5px;
+                background-color: rgba(255, 255, 255, 0.1);
+                border-radius: 4px;
+            }
+            
+            .gesture-history li:last-child {
+                margin-bottom: 0;
+            }
+            
+            .gesture-history .gesture-name {
+                font-weight: bold;
+            }
+            
+            .gesture-history .gesture-time {
+                opacity: 0.8;
+            }
+            
+            .gesture-icon {
+                transition: all 0.3s ease-in-out;
+            }
+            
+            .gesture-icon.active {
+                transform: scale(1.1);
+                box-shadow: 0 0 20px rgba(52, 152, 219, 0.7);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
     async function fetchCameras() {
         try {
             const response = await fetch('/get_cameras');
@@ -176,6 +293,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const videoUrl = `/video_feed?camera_id=${selectedCamera}`;
         cameraImage.src = videoUrl;
         isStreaming = true;
+
+        // Initialize log start time when streaming begins
+        logStartTime = Date.now();
     }
 
     function stopVideoStream() {
@@ -184,10 +304,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateGestureDisplay(gesture) {
+        // Clear any existing timeout
+        if (gestureDisplayTimeout) {
+            clearTimeout(gestureDisplayTimeout);
+        }
+
         if (gesture === 'idle' || !gestureIcons[gesture]) {
             // Set default appearance for idle or unknown gestures
             gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
             gestureIcon.style.backgroundColor = '#f4f4f4';
+            gestureIcon.classList.remove('active');
         } else {
             // Use gesture icon images
             gestureIcon.innerHTML = `
@@ -195,12 +321,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 <span id="gestureText">${formatGestureName(gesture)}</span>
             `;
             gestureIcon.style.backgroundColor = '#3498db';
+            gestureIcon.classList.add('active');
 
-            // Flash effect
-            setTimeout(() => {
+            // Set timeout to revert after 3 seconds
+            gestureDisplayTimeout = setTimeout(() => {
                 gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
                 gestureIcon.style.backgroundColor = '#f4f4f4';
-            }, 1000);
+                gestureIcon.classList.remove('active');
+            }, GESTURE_DISPLAY_DURATION);
         }
     }
 
@@ -209,6 +337,52 @@ document.addEventListener('DOMContentLoaded', function() {
         return gesture.split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
+    }
+
+    function addToGestureHistory(gesture, timestamp) {
+        // Add gesture to history
+        gestureHistory.unshift({
+            gesture: gesture,
+            timestamp: timestamp
+        });
+
+        // Keep only the most recent items
+        while (gestureHistory.length > MAX_HISTORY_ITEMS) {
+            gestureHistory.pop();
+        }
+    }
+
+    function updateGestureHistoryDisplay() {
+        const historyList = document.querySelector('#gestureHistory ul');
+        if (!historyList) return;
+
+        // Clear the list
+        historyList.innerHTML = '';
+
+        // Add each history item
+        gestureHistory.forEach(item => {
+            const listItem = document.createElement('li');
+
+            const gestureName = document.createElement('span');
+            gestureName.className = 'gesture-name';
+            gestureName.textContent = formatGestureName(item.gesture);
+
+            const gestureTime = document.createElement('span');
+            gestureTime.className = 'gesture-time';
+            gestureTime.textContent = `${item.timestamp} ms`;
+
+            listItem.appendChild(gestureName);
+            listItem.appendChild(gestureTime);
+
+            historyList.appendChild(listItem);
+        });
+    }
+
+    function updateTimestampDisplay(timestamp) {
+        const timestampDisplay = document.getElementById('currentTimestamp');
+        if (timestampDisplay) {
+            timestampDisplay.textContent = `Time: ${timestamp} ms`;
+        }
     }
 
     async function toggleLogging() {
@@ -228,31 +402,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 startLoggingBtn.textContent = 'Stop Logging';
                 saveLogBtn.disabled = true;
                 logStartTime = Date.now();
-                logOutput.value = 'timestamp,events\n';
+
+                // Reset gesture history
+                gestureHistory.length = 0;
+                updateGestureHistoryDisplay();
             } else {
                 // Logging stopped
                 startLoggingBtn.textContent = 'Start Logging';
                 saveLogBtn.disabled = false;
                 logData = data.csv_data;
-                logOutput.value = logData;
             }
         } catch (error) {
             console.error('Error toggling logging:', error);
         }
     }
 
-    function logGesture(gesture) {
-        const timeElapsed = Date.now() - logStartTime;
-        const newLogEntry = `${timeElapsed},${gesture}\n`;
-        logOutput.value += newLogEntry;
-
-        // Scroll to bottom of log
-        logOutput.scrollTop = logOutput.scrollHeight;
-    }
-
     async function saveCSVLog() {
         try {
-            const fullPath = `${filePath.value}${fileName.value}`;
+            const fullPath = `${document.getElementById('filePath').value}${document.getElementById('fileName').value}`;
 
             const response = await fetch('/save_csv', {
                 method: 'POST',

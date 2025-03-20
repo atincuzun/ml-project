@@ -4,6 +4,12 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tetris.css') }}">
+<style>
+    .gesture-icon.active {
+        transform: scale(1.1);
+        box-shadow: 0 0 20px rgba(52, 152, 219, 0.7);
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -35,6 +41,8 @@
                     <li><strong>Swipe Right:</strong> Move Right</li>
                     <li><strong>Rotate Clockwise:</strong> Rotate Clockwise</li>
                     <li><strong>Rotate Counterclockwise:</strong> Rotate Counterclockwise</li>
+                    <li><strong>Hand Up:</strong> Switch with Next Piece</li>
+                    <li><strong>Hand Down:</strong> Hard Drop</li>
                 </ul>
             </div>
         </div>
@@ -85,6 +93,7 @@
                     <li>↓ : Soft drop</li>
                     <li>Space : Hard drop</li>
                     <li>Z : Rotate counter-clockwise</li>
+                    <li>U : Switch with next piece</li>
                 </ul>
             </div>
         </div>

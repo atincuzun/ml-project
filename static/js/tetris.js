@@ -20,13 +20,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const ctx = tetrisCanvas.getContext('2d');
     const nextCtx = nextPieceCanvas.getContext('2d');
 
+    // Gesture display timeout
+    let gestureDisplayTimeout = null;
+    const GESTURE_DISPLAY_DURATION = 3000; // 3 seconds
+
     // Gesture icons
     const gestureIcons = {
         'swipe_left': '/static/img/swipe_left.png',
         'swipe_right': '/static/img/swipe_right.png',
         'rotate_cw': '/static/img/rotate_cw.png',
-        'rotate_ccw': '/static/img/rotate_ccw.png'
+        'rotate_ccw': '/static/img/rotate_ccw.png',
+        'hand_up': '/static/img/hand_up.png',
+        'hand_down': '/static/img/hand_down.png'
     };
+
+    // Update gesture controls info
+    updateGestureControlsInfo();
 
     // Game constants
     const ROWS = 20;
@@ -115,7 +124,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.addEventListener('keydown', handleKeyPress);
 
+    // Add styles for the active gesture icon
+    const style = document.createElement('style');
+    style.textContent = `
+        .gesture-icon {
+            transition: all 0.3s ease-in-out;
+        }
+        
+        .gesture-icon.active {
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(52, 152, 219, 0.7);
+        }
+    `;
+    document.head.appendChild(style);
+
     // Functions
+    function updateGestureControlsInfo() {
+        // Update the gesture controls text in the UI
+        const gestureControlList = document.querySelector('.gesture-control-list');
+        if (gestureControlList) {
+            gestureControlList.innerHTML = `
+                <li><strong>Swipe Left:</strong> Move Left</li>
+                <li><strong>Swipe Right:</strong> Move Right</li>
+                <li><strong>Rotate Clockwise:</strong> Rotate Clockwise</li>
+                <li><strong>Rotate Counterclockwise:</strong> Rotate Counterclockwise</li>
+                <li><strong>Hand Up:</strong> Switch with Next Piece</li>
+                <li><strong>Hand Down:</strong> Hard Drop</li>
+            `;
+        }
+    }
+
     function createBoard() {
         return Array.from(Array(ROWS), () => Array(COLS).fill(0));
     }
@@ -285,9 +323,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
         }
-
-        // Flash gesture indicator
-        updateGestureDisplay(dir === 1 ? 'rotate_cw' : 'rotate_ccw');
     }
 
     function playerDrop() {
@@ -312,8 +347,49 @@ document.addEventListener('DOMContentLoaded', function() {
             return false;
         }
 
-        // Flash gesture indicator
-        updateGestureDisplay(dir === 1 ? 'swipe_right' : 'swipe_left');
+        return true;
+    }
+
+    function playerHardDrop() {
+        // Keep moving down until collision
+        while (!collide(board, player)) {
+            player.pos.y++;
+        }
+
+        // Move back up one position
+        player.pos.y--;
+
+        // Complete the drop
+        playerDrop();
+    }
+
+    function playerSwitchPiece() {
+        // Save the current and next pieces
+        const currentShape = player.shape;
+        const currentPos = {...player.pos};
+        const nextShape = player.next;
+
+        // Switch current with next
+        player.shape = nextShape;
+
+        // Reset position to top of the board with proper centering
+        player.pos.y = 0;
+        player.pos.x = Math.floor(COLS / 2) - Math.floor(player.shape[0].length / 2);
+
+        // Check if the switch causes a collision
+        if (collide(board, player)) {
+            // If collision, revert switch
+            player.shape = currentShape;
+            player.pos = currentPos;
+            return false;
+        }
+
+        // Update next piece to the saved current piece
+        player.next = currentShape;
+
+        // Update the next piece display
+        drawNextPiece();
+
         return true;
     }
 
@@ -428,41 +504,52 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!gameActive || gamePaused) return;
 
         // Prevent default behavior for arrow keys and space
-        if ([32, 37, 38, 39, 40].includes(e.keyCode)) {
+        if ([32, 37, 38, 39, 40, 85, 68].includes(e.keyCode)) {
             e.preventDefault();
         }
 
         switch (e.keyCode) {
             case 37: // Left arrow
                 playerMove(-1);
+                updateGestureDisplay('swipe_left');
                 break;
             case 39: // Right arrow
                 playerMove(1);
+                updateGestureDisplay('swipe_right');
                 break;
             case 40: // Down arrow
                 playerDrop();
                 break;
             case 38: // Up arrow (rotate clockwise)
                 playerRotate(1);
+                updateGestureDisplay('rotate_cw');
                 break;
             case 90: // Z key (rotate counter-clockwise)
                 playerRotate(-1);
+                updateGestureDisplay('rotate_ccw');
                 break;
             case 32: // Space (hard drop)
-                while (!collide(board, player)) {
-                    player.pos.y++;
-                }
-                player.pos.y--;
-                playerDrop();
+                playerHardDrop();
+                updateGestureDisplay('hand_down');
+                break;
+            case 85: // U key (switch with next piece)
+                playerSwitchPiece();
+                updateGestureDisplay('hand_up');
                 break;
         }
     }
 
     function updateGestureDisplay(gesture) {
+        // Clear any existing timeout
+        if (gestureDisplayTimeout) {
+            clearTimeout(gestureDisplayTimeout);
+        }
+
         if (gesture === 'idle' || !gestureIcons[gesture]) {
             // Set default appearance for idle or unknown gestures
             gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
             gestureIcon.style.backgroundColor = '#f4f4f4';
+            gestureIcon.classList.remove('active');
         } else {
             // Use gesture icon images
             gestureIcon.innerHTML = `
@@ -470,12 +557,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 <span id="gestureText">${formatGestureName(gesture)}</span>
             `;
             gestureIcon.style.backgroundColor = '#3498db';
+            gestureIcon.classList.add('active');
 
-            // Flash effect
-            setTimeout(() => {
+            // Set timeout to revert after 3 seconds
+            gestureDisplayTimeout = setTimeout(() => {
                 gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
                 gestureIcon.style.backgroundColor = '#f4f4f4';
-            }, 1000);
+                gestureIcon.classList.remove('active');
+            }, GESTURE_DISPLAY_DURATION);
         }
     }
 
@@ -509,6 +598,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
             case 'rotate_ccw':
                 playerRotate(-1);
+                break;
+            case 'hand_up':
+                playerSwitchPiece();
+                break;
+            case 'hand_down':
+                playerHardDrop();
                 break;
         }
     }

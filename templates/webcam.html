@@ -4,6 +4,12 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/webcam.css') }}">
+<style>
+    /* Hide the log container */
+    .log-container {
+        display: none;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -38,6 +44,7 @@
         </div>
     </div>
 
+    <!-- This is hidden but kept for functionality -->
     <div class="log-container">
         <h3>Gesture Log</h3>
         <textarea id="logOutput" class="log-output" readonly rows="10"></textarea>

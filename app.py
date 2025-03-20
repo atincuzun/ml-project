@@ -44,7 +44,18 @@ data_handler = CSVDataHandler()
 
 # Open browser automatically when the app starts
 def open_browser():
-    webbrowser.open_new('http://127.0.0.1:5000/')
+    try:
+        import webbrowser
+        import time
+        
+        # Give the server more time to start
+        time.sleep(2.0)
+        
+        # Attempt to open browser with explicit URL
+        print("Opening browser to http://127.0.0.1:5000/ ...")
+        webbrowser.open('http://127.0.0.1:5000/', new=2)
+    except Exception as e:
+        print(f"Error opening browser: {e}")
 
 
 @app.route('/')
@@ -188,67 +199,444 @@ def video_feed():
 
 @app.route('/process_video', methods=['POST'])
 def process_video():
-    """Process uploaded video file"""
-    if 'video' not in request.files:
-        return jsonify({'error': 'No video file uploaded'}), 400
+    """Process uploaded video file with improved error handling"""
+    try:
+        # Check if this is a request to get just the first frame
+        if request.is_json:
+            data = request.json
+            video_path = data.get('video_path')
+            get_first_frame_only = data.get('get_first_frame_only', False)
+            
+            if not video_path or not os.path.exists(video_path):
+                return jsonify({'error': 'Invalid video path'}), 400
+        else:
+            # Normal file upload
+            if 'video' not in request.files:
+                return jsonify({'error': 'No video file uploaded'}), 400
+            
+            video_file = request.files['video']
+            if video_file.filename == '':
+                return jsonify({'error': 'No video file selected'}), 400
+            
+            # Ensure the filename is safe
+            from werkzeug.utils import secure_filename
+            filename = secure_filename(video_file.filename)
+            video_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
+            # Save the video file
+            try:
+                video_file.save(video_path)
+            except Exception as e:
+                return jsonify({'error': f'Failed to save video: {str(e)}'}), 500
+            
+            get_first_frame_only = False
+        
+        # Check if video file exists and is readable
+        if not os.path.isfile(video_path):
+            return jsonify({'error': 'Video file not found or not accessible'}), 404
+        
+        # Extract the first frame for preview regardless of mode
+        first_frame = None
+        try:
+            cap = cv2.VideoCapture(video_path)
+            
+            # Try different backends if the default fails
+            if not cap.isOpened():
+                backends = []
+                if os.name == 'nt':  # Windows
+                    backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_FFMPEG]
+                else:
+                    backends = [cv2.CAP_FFMPEG]
+                
+                for backend in backends:
+                    if cap is not None:
+                        cap.release()
+                    try:
+                        cap = cv2.VideoCapture(video_path, backend)
+                        if cap.isOpened():
+                            break
+                    except Exception:
+                        continue
+            
+            if not cap.isOpened():
+                raise Exception("Failed to open video with any backend")
+            
+            # Read first frame
+            success, frame = cap.read()
+            if success:
+                # Create a thumbnail version
+                height, width = frame.shape[:2]
+                max_size = 800
+                if height > max_size or width > max_size:
+                    scale = max_size / max(height, width)
+                    new_height = int(height * scale)
+                    new_width = int(width * scale)
+                    frame = cv2.resize(frame, (new_width, new_height))
+                
+                # Encode the frame to JPEG
+                ret, buffer = cv2.imencode('.jpg', frame)
+                if ret:
+                    # Convert to base64 for sending in JSON
+                    import base64
+                    first_frame = base64.b64encode(buffer).decode('utf-8')
+            
+            # Get video info
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
+            cap.release()
+            
+            # If we just need the first frame, return it now
+            if get_first_frame_only:
+                return jsonify({
+                    'success': True,
+                    'first_frame': first_frame
+                })
+        
+        except Exception as e:
+            print(f"Error extracting first frame: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Set the video path for processing if we're not just getting the first frame
+        if not get_first_frame_only:
+            # Initialize the processor with this video
+            processor.set_video_path(video_path)
+        
+        # Return success response with video path and first frame
+        return jsonify({
+            'success': True,
+            'video_path': video_path,
+            'first_frame': first_frame,
+            'message': 'Video uploaded and ready for processing'
+        })
     
-    video_file = request.files['video']
-    video_path = os.path.join(app.config['UPLOAD_FOLDER'], video_file.filename)
-    video_file.save(video_path)
-    
-    # Set the video path for processing
-    processor.set_video_path(video_path)
-    
-    return jsonify({'success': True, 'video_path': video_path})
+    except Exception as e:
+        print(f"Unexpected error in process_video: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/video_process_feed')
 def video_process_feed():
-    """Stream processed video frames"""
+    """Stream processed video frames without mode display"""
     
     def generate():
-        success = True
+        try:
+            # Create a new video capture object directly
+            video_path = processor.video_path
+            if not video_path or not os.path.exists(video_path):
+                print("Video path not set or file doesn't exist")
+                return
+            
+            # Open the video file
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                print(f"Failed to open video: {video_path}")
+                return
+            
+            # Get video properties
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            if fps <= 0 or fps > 120:
+                fps = 25.0  # Default if invalid
+            
+            frame_interval = 1000.0 / fps
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            
+            # Process frames with timing control
+            current_frame = 0
+            last_frame_time = time.time()
+            
+            # Create MediaPipe Pose instance for video processing
+            mp_pose = mp.solutions.pose
+            pose = mp_pose.Pose(
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+                model_complexity=1,
+                static_image_mode=False  # Important for video
+            )
+            
+            print(f"Processing video: {video_path}")
+            print(f"FPS: {fps}, Frames: {frame_count}")
+            
+            while True:
+                # Read frame
+                success, frame = cap.read()
+                if not success:
+                    print(f"End of video after {current_frame} frames")
+                    break
+                
+                current_frame += 1
+                
+                # Process frame with MediaPipe
+                try:
+                    # Create a copy for drawing
+                    processed_frame = frame.copy()
+                    
+                    # CRITICAL FIX: Set proper image processing for MediaPipe
+                    # Convert to RGB (MediaPipe requires RGB)
+                    image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    
+                    # Set image as non-writeable to save memory
+                    image_rgb.flags.writeable = False
+                    
+                    # Get dimensions for fixing the MediaPipe error
+                    height, width, _ = image_rgb.shape
+                    
+                    # Process the image
+                    results = pose.process(image_rgb)
+                    
+                    # Set image back to writeable before drawing
+                    image_rgb.flags.writeable = True
+                    
+                    # Draw landmarks if detected
+                    if results.pose_landmarks:
+                        mp.solutions.drawing_utils.draw_landmarks(
+                            processed_frame,
+                            results.pose_landmarks,
+                            mp_pose.POSE_CONNECTIONS,
+                            landmark_drawing_spec=mp.solutions.drawing_styles.get_default_pose_landmarks_style()
+                        )
+                        
+                        # Store pose data for gesture detection
+                        processor.last_pose_data = results.pose_landmarks
+                        
+                        # Process this frame through processor's sliding window
+                        landmarks_data = []
+                        for i, landmark in enumerate(results.pose_landmarks.landmark):
+                            landmarks_data.append({
+                                'x': landmark.x,
+                                'y': landmark.y,
+                                'z': landmark.z,
+                                'visibility': landmark.visibility
+                            })
+                        
+                        # Add to sliding window
+                        if hasattr(processor, 'sliding_window'):
+                            processor.sliding_window.append(landmarks_data)
+                            
+                            # Keep sliding window to specified size
+                            if len(processor.sliding_window) > processor.sliding_window_size:
+                                processor.sliding_window.pop(0)
+                            
+                            # Process for gesture recognition every step_size frames
+                            processor.frame_count += 1
+                            if processor.frame_count % processor.sliding_window_step_size == 0:
+                                # Process sliding window through gesture recognition
+                                if hasattr(processor, 'gesture_model') and hasattr(processor, 'gesture_processor'):
+                                    recognized_gesture = processor.gesture_model.predict(
+                                        processor.sliding_window, processor.excluded_landmarks)
+                                    
+                                    # Post-process the gesture
+                                    event, mode, mode_percentage = processor.gesture_processor.process(
+                                        recognized_gesture)
+                                    
+                                    # Log data for later retrieval
+                                    timestamp = current_frame
+                                    processor.log_data["timestamp"].append(timestamp)
+                                    processor.log_data["events"].append(event)
+                                    processor.log_data["gesture"].append(recognized_gesture)
+                                    processor.log_data["mode"].append(mode)
+                                    processor.log_data["mode_percentage"].append(mode_percentage)
+                    
+                    # Add frame count text - only show frame numbers, not mode
+                    cv2.putText(
+                        processed_frame,
+                        f"Frame: {current_frame}/{frame_count}",
+                        (20, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (0, 255, 0),
+                        2
+                    )
+                    
+                    # Add progress bar at the bottom of the frame
+                    if frame_count > 0:
+                        progress = current_frame / frame_count
+                        bar_height = 10
+                        progress_width = int(processed_frame.shape[1] * progress)
+                        
+                        cv2.rectangle(
+                            processed_frame,
+                            (0, processed_frame.shape[0] - bar_height),
+                            (progress_width, processed_frame.shape[0]),
+                            (0, 255, 0),
+                            -1
+                        )
+                
+                except Exception as e:
+                    print(f"Error processing frame: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    processed_frame = frame  # Use original frame on error
+                    
+                    # Add error message to frame
+                    cv2.putText(
+                        processed_frame,
+                        f"Error: {str(e)[:50]}",
+                        (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (0, 0, 255),
+                        2
+                    )
+                
+                # Timing control to maintain original FPS
+                now = time.time()
+                elapsed = (now - last_frame_time) * 1000  # ms
+                
+                if elapsed < frame_interval:
+                    # Sleep to maintain timing
+                    time.sleep((frame_interval - elapsed) / 1000.0)
+                
+                last_frame_time = time.time()
+                
+                # Encode and send frame
+                try:
+                    # Use JPEG encoding for browser compatibility
+                    ret, buffer = cv2.imencode('.jpg', processed_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    if not ret:
+                        print("Failed to encode frame")
+                        continue
+                    
+                    # Send frame
+                    frame_data = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+                except Exception as e:
+                    print(f"Error sending frame: {e}")
+            
+            # Return a signal to JavaScript that video has ended
+            completion_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(
+                completion_frame,
+                "Video Processing Complete",
+                (50, 240),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (255, 255, 255),
+                2
+            )
+            
+            # Set processor state to indicate completion
+            processor.current_frame = processor.video_frame_count  # Mark as finished
+            
+            # Encode and send the completion notification frame
+            ret, buffer = cv2.imencode('.jpg', completion_frame)
+            if ret:
+                frame_data = buffer.tobytes()
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n'
+                       b'X-Video-End: true\r\n\r\n' + frame_data + b'\r\n')
         
-        while success:
-            # Get the processed frame with MediaPipe landmarks already drawn on it
-            processed_frame, pose_frame, gesture, success = processor.get_next_video_frame()
+        except Exception as e:
+            print(f"Video streaming error: {e}")
+            import traceback
+            traceback.print_exc()
             
-            if not success:
-                break
+            # Create an error frame to display to the user
+            error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(
+                error_frame,
+                "Error processing video",
+                (50, 240),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (255, 255, 255),
+                2
+            )
+            cv2.putText(
+                error_frame,
+                str(e)[:50],
+                (50, 280),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2
+            )
             
-            # If we're supposed to be logging, add the frame to our data
-            if processor.is_logging:
-                timestamp = processor.get_current_video_timestamp()
-                data_handler.add_frame(processor.last_pose_data, timestamp, gesture)
+            # Encode and send the error frame
+            ret, buffer = cv2.imencode('.jpg', error_frame)
+            if ret:
+                frame_data = buffer.tobytes()
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+        
+        finally:
+            # Clean up
+            if 'cap' in locals() and cap is not None:
+                cap.release()
+                print("Video released")
             
-            # Encode the frames - we only need the processed frame with landmarks
-            ret, buffer_original = cv2.imencode('.jpg', processed_frame)
-            ret, buffer_pose = cv2.imencode('.jpg', pose_frame)  # Keep for compatibility
-            
-            # Combine frames with a delimiter for frontend to split
-            combined_data = buffer_original.tobytes() + b"FRAME_DELIMITER" + buffer_original.tobytes() + b"FRAME_DELIMITER"
-            
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + combined_data + b'\r\n')
+            if 'pose' in locals():
+                pose.close()
     
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/gesture_stream')
 def gesture_stream():
-    """Stream of detected gestures using Server-Sent Events (SSE)"""
+    """Stream of detected gestures using Server-Sent Events (SSE) with enhanced data"""
     
     def generate():
         last_gesture = "idle"
+        last_mode = "Registering"
+        last_percentage = 0
         
         while True:
             current_gesture = processor.last_gesture
             
-            # Only send when gesture changes
-            if current_gesture != last_gesture:
-                data = json.dumps({'gesture': current_gesture})
+            # Get additional info if available
+            current_mode = processor.gesture_processor.mode if hasattr(processor,
+                                                                       'gesture_processor') else "Registering"
+            current_percentage = 0
+            
+            if hasattr(processor, 'gesture_processor'):
+                # Calculate mode percentage
+                if current_mode == "Registering":
+                    # Count most frequent non-idle gesture
+                    gesture_counts = {}
+                    for g in processor.gesture_processor.recognized_gestures:
+                        if g != "idle" and g not in gesture_counts:
+                            gesture_counts[g] = 0
+                        if g != "idle":
+                            gesture_counts[g] = gesture_counts.get(g, 0) + 1
+                    
+                    # Find max count
+                    max_count = 0
+                    for g, count in gesture_counts.items():
+                        max_count = max(max_count, count)
+                    
+                    # Calculate percentage
+                    buffer_size = len(processor.gesture_processor.recognized_gestures)
+                    current_percentage = (max_count / buffer_size) * 100 if buffer_size > 0 else 0
+                else:  # Registered mode
+                    if processor.gesture_processor.registered_gesture:
+                        # Count occurrences of registered gesture
+                        registered_count = processor.gesture_processor.recognized_gestures.count(
+                            processor.gesture_processor.registered_gesture)
+                        
+                        # Calculate percentage
+                        buffer_size = len(processor.gesture_processor.recognized_gestures)
+                        current_percentage = (registered_count / buffer_size) * 100 if buffer_size > 0 else 0
+            
+            # Only send when anything changes
+            if (current_gesture != last_gesture or
+                    current_mode != last_mode or
+                    abs(current_percentage - last_percentage) > 1.0):
+                data = json.dumps({
+                    'gesture': current_gesture,
+                    'mode': current_mode,
+                    'percentage': current_percentage
+                })
                 yield f"data: {data}\n\n"
+                
                 last_gesture = current_gesture
+                last_mode = current_mode
+                last_percentage = current_percentage
             
             # Still need a small delay to prevent CPU overuse
             time.sleep(0.1)
@@ -256,21 +644,103 @@ def gesture_stream():
     return Response(generate(), mimetype='text/event-stream')
 
 
+@app.route('/get_gesture_log')
+def get_gesture_log():
+    """Get current gesture log data as HTML or JSON"""
+    format_type = request.args.get('format', 'html')
+    
+    if format_type == 'json':
+        # Return as JSON for JavaScript processing
+        log_data = []
+        
+        if hasattr(processor, 'log_data') and processor.log_data["timestamp"]:
+            for i in range(len(processor.log_data["timestamp"])):
+                log_data.append({
+                    'timestamp': processor.log_data["timestamp"][i],
+                    'event': processor.log_data["events"][i],
+                    'gesture': processor.log_data["gesture"][i],
+                    'mode': processor.log_data["mode"][i],
+                    'mode_percentage': processor.log_data["mode_percentage"][i]
+                })
+        
+        return jsonify(log_data)
+    else:
+        # Return as pre-rendered HTML
+        html = """
+        <table class="gesture-log-table" style="width:100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background-color: #f2f2f2;">
+                    <th style="border:1px solid #ddd; padding:8px; text-align:left;">Frame</th>
+                    <th style="border:1px solid #ddd; padding:8px; text-align:left;">Event</th>
+                    <th style="border:1px solid #ddd; padding:8px; text-align:left;">Gesture</th>
+                    <th style="border:1px solid #ddd; padding:8px; text-align:left;">Mode</th>
+                    <th style="border:1px solid #ddd; padding:8px; text-align:left;">Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
+        
+        if hasattr(processor, 'log_data') and processor.log_data["timestamp"]:
+            for i in range(len(processor.log_data["timestamp"])):
+                # Highlight non-idle events
+                row_style = "background-color: #ffffcc;" if processor.log_data["events"][i] != "idle" else ""
+                
+                html += f"""
+                <tr style="{row_style}">
+                    <td style="border:1px solid #ddd; padding:8px;">{processor.log_data["timestamp"][i]}</td>
+                    <td style="border:1px solid #ddd; padding:8px;">{processor.log_data["events"][i]}</td>
+                    <td style="border:1px solid #ddd; padding:8px;">{processor.log_data["gesture"][i]}</td>
+                    <td style="border:1px solid #ddd; padding:8px;">{processor.log_data["mode"][i]}</td>
+                    <td style="border:1px solid #ddd; padding:8px;">{processor.log_data["mode_percentage"][i]:.1f}%</td>
+                </tr>
+                """
+        else:
+            html += """
+            <tr>
+                <td colspan="5" style="border:1px solid #ddd; padding:12px; text-align:center;">No gesture data recorded yet.</td>
+            </tr>
+            """
+        
+        html += """
+            </tbody>
+        </table>
+        """
+        
+        return html
+
+
 @app.route('/toggle_logging', methods=['POST'])
 def toggle_logging():
     """Toggle data logging state"""
-    processor.toggle_logging()
+    is_logging = processor.toggle_logging()
     
-    if not processor.is_logging:
+    if not is_logging:
         # Logging was turned off, return the collected data
-        csv_data = data_handler.get_csv_data()
+        # Format the CSV data with the specified columns
+        request_path = request.path
+        
+        # Different column names for webcam and video
+        if '/webcam' in request.headers.get('Referer', ''):
+            csv_data = "time_elapsed,events,gesture,mode,mode_percentage\n"
+        else:
+            # Default to video format
+            csv_data = "frame,events,gesture,mode,mode_percentage\n"
+        
+        # Add sample data
+        if hasattr(processor, 'log_data') and processor.log_data["timestamp"]:
+            for i in range(len(processor.log_data["timestamp"])):
+                csv_data += f"{processor.log_data['timestamp'][i]},"
+                csv_data += f"{processor.log_data['events'][i]},"
+                csv_data += f"{processor.log_data['gesture'][i]},"
+                csv_data += f"{processor.log_data['mode'][i]},"
+                csv_data += f"{processor.log_data['mode_percentage'][i]:.1f}\n"
+        
         return jsonify({
             'logging': False,
             'csv_data': csv_data
         })
     else:
-        # Logging was turned on, clear previous data
-        data_handler.clear_data()
+        # Logging was turned on
         return jsonify({'logging': True})
 
 
@@ -493,6 +963,31 @@ def get_camera_info():
         })
 
 
+@app.route('/check_video_status')
+def check_video_status():
+    """Check if video processing has completed"""
+    # Check if the video is still playing
+    if processor.video_cap is None or not processor.video_cap.isOpened():
+        return jsonify({
+            'completed': True,
+            'message': 'Video processing complete'
+        })
+    
+    # Check if we've reached the end of the video
+    if hasattr(processor, 'current_frame') and hasattr(processor, 'video_frame_count'):
+        if processor.current_frame >= processor.video_frame_count:
+            return jsonify({
+                'completed': True,
+                'message': 'Video processing complete'
+            })
+    
+    # Still processing
+    return jsonify({
+        'completed': False,
+        'message': 'Video still processing'
+    })
+
+
 if __name__ == '__main__':
     # Create upload folder if it doesn't exist
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -500,7 +995,9 @@ if __name__ == '__main__':
     
     # Check if we're in the reloader process to prevent opening the browser twice
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
-        Timer(1.0, open_browser).start()
+        import threading
+        
+        threading.Timer(2.0, open_browser).start()
     
-    # todo: Turn off once finished
-    app.run(debug=True)
+    # Run with host explicitly specified
+    app.run(debug=True, host='127.0.0.1', port=5000)
