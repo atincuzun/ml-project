@@ -9,6 +9,7 @@ class AnnotationGenerator:
     """
     Generates landmark annotations from videos, extracts only body pose landmarks
     (33 landmarks) and associates them with gesture labels.
+    Supports processing multiple videos and combining their data.
     """
     
     def __init__(self, video_path=None, annotation_path=None):
@@ -23,6 +24,10 @@ class AnnotationGenerator:
         self.frame_labels = []
         self.frame_landmarks = []
         self.processed = False
+        
+        # For handling multiple videos
+        self.all_landmarks = []
+        self.all_labels = []
         
         # Initialize MediaPipe Pose only
         self.mp_pose = mp.solutions.pose
@@ -247,26 +252,119 @@ class AnnotationGenerator:
         for i in range(min_frames):
             self.frame_landmarks[i]['label'] = self.frame_labels[i]
             
+        # Add to combined data for multiple videos
+        self.all_landmarks.extend(self.frame_landmarks)
+        self.all_labels.extend(self.frame_labels)
+        
         self.processed = True
         print(f"Training data prepared with {min_frames} frames")
         
         return self
     
+    def process_video(self, video_path, annotation_path):
+        """
+        Process a single video and its annotation, and add it to the combined dataset.
+        
+        Parameters:
+        -----------
+        video_path : str
+            Path to the video file
+        annotation_path : str
+            Path to the annotation file
+            
+        Returns:
+        --------
+        self
+        """
+        print(f"\nProcessing video: {os.path.basename(video_path)}")
+        print(f"With annotation: {os.path.basename(annotation_path)}")
+        
+        # Reset internal state for this video
+        self.video_path = None
+        self.annotation_path = None
+        self.frame_landmarks = []
+        self.frame_labels = []
+        self.annotations = []
+        self.processed = False
+        
+        # Process the video
+        self.set_video_path(video_path) \
+             .set_annotation_path(annotation_path) \
+             .prepare_training_data()
+        
+        # Clean up
+        if self.cap and self.cap.isOpened():
+            self.cap.release()
+            self.cap = None
+        
+        return self
+    
+    def process_directory(self, data_dir):
+        """
+        Process all videos in a directory.
+        
+        Parameters:
+        -----------
+        data_dir : str
+            Path to the directory containing videos and annotations
+            
+        Returns:
+        --------
+        self
+        """
+        print(f"Scanning directory: {data_dir}")
+        
+        # Get all video files
+        video_files = [f for f in os.listdir(data_dir) if f.endswith('.mp4')]
+        
+        if not video_files:
+            print("No video files found in the directory")
+            return self
+        
+        print(f"Found {len(video_files)} video files")
+        
+        # Process each video
+        for video_file in video_files:
+            video_path = os.path.join(data_dir, video_file)
+            
+            # Look for matching annotation file
+            base_name = os.path.splitext(video_file)[0]
+            eaf_path = os.path.join(data_dir, base_name + '.eaf')
+            txt_path = os.path.join(data_dir, base_name + '.txt')
+            
+            # Use the first available annotation file
+            if os.path.exists(eaf_path):
+                self.process_video(video_path, eaf_path)
+            elif os.path.exists(txt_path):
+                self.process_video(video_path, txt_path)
+            else:
+                print(f"No annotation file found for {video_file}, skipping")
+        
+        return self
+    
     def get_landmark_data(self):
         """Get the landmark data after calling prepare_training_data."""
-        if not self.processed:
-            print("Data not processed. Call prepare_training_data() first.")
+        if not self.processed and not self.all_landmarks:
+            print("No data processed. Call prepare_training_data() or process_video() first.")
             return None
             
-        return self.frame_landmarks
+        # Return combined data if available, otherwise return single video data
+        if self.all_landmarks:
+            return self.all_landmarks
+        else:
+            return self.frame_landmarks
     
     def get_landmark_label(self):
         """Get the landmark labels after calling prepare_training_data."""
-        if not self.processed:
-            print("Data not processed. Call prepare_training_data() first.")
+        if not self.processed and not self.all_labels:
+            print("No data processed. Call prepare_training_data() or process_video() first.")
             return None
             
-        return self.frame_labels
+        # Return combined data if available, otherwise return single video data
+        if self.all_labels:
+            return self.all_labels
+        else:
+            return self.frame_labels
     
     def save_data(self, output_path=None):
         """Save the processed data to a file."""
@@ -277,8 +375,8 @@ class AnnotationGenerator:
             print("Output path not set. Please set output path first.")
             return self
             
-        if not self.processed:
-            print("Data not processed. Call prepare_training_data() first.")
+        if not self.processed and not self.all_landmarks:
+            print("No data processed. Call prepare_training_data() or process_video() first.")
             return self
             
         # Create output directory if it doesn't exist
@@ -286,8 +384,8 @@ class AnnotationGenerator:
         
         # Save the data
         data = {
-            'landmarks': self.frame_landmarks,
-            'labels': self.frame_labels
+            'landmarks': self.get_landmark_data(),
+            'labels': self.get_landmark_label()
         }
         
         np.save(self.output_path, data)
@@ -295,8 +393,23 @@ class AnnotationGenerator:
         
         return self
     
+    def reset(self):
+        """Reset the combined data but keep MediaPipe initialized."""
+        self.all_landmarks = []
+        self.all_labels = []
+        self.frame_landmarks = []
+        self.frame_labels = []
+        self.annotations = []
+        self.processed = False
+        
+        if self.cap and self.cap.isOpened():
+            self.cap.release()
+            self.cap = None
+        
+        return self
+    
     def close(self):
         """Release resources."""
         if self.cap and self.cap.isOpened():
             self.cap.release()
-
+            self.cap = None

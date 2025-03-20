@@ -12,7 +12,7 @@ class GestureClassificationNetwork:
     Takes gesture features and classifies them into predefined gesture categories
     """
     
-    def __init__(self, input_size, num_gestures):
+    def __init__(self, input_size, num_gestures, window_size=10):
         """
         Initialize the gesture classification network
         
@@ -23,6 +23,7 @@ class GestureClassificationNetwork:
         num_gestures : int
             Number of gesture classes to recognize
         """
+		
         self.network = NeuralNetwork()
         
         # Architecture: Input -> Dense(128) -> ReLU -> Dense(64) -> ReLU -> Dense(num_gestures) -> Softmax
