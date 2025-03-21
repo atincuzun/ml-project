@@ -4,6 +4,7 @@ from Network.Layers.Dense import Dense
 from Network.ActivationFunctions.ReLU import ReLU
 from Network.ActivationFunctions.Softmax import Softmax
 from Network.Losses.CategoricalCrossEntropy import CategoricalCrossEntropy
+from Network.Losses.MeanSquaredError import MeanSquaredError
 
 class GestureClassificationNetwork:
     """
@@ -12,7 +13,7 @@ class GestureClassificationNetwork:
     Takes gesture features and classifies them into predefined gesture categories
     """
     
-    def __init__(self, input_size, num_gestures, window_size=10):
+    def __init__(self, input_size, num_gestures, window_size=10, loss_function='cross_entropy'):
         """
         Initialize the gesture classification network
         
@@ -22,11 +23,14 @@ class GestureClassificationNetwork:
             Size of input feature vector
         num_gestures : int
             Number of gesture classes to recognize
+        window_size : int
+            Size of sliding window for sequence data
+        loss_function : str
+            Type of loss function to use ('cross_entropy' or 'mse')
         """
-		
         self.network = NeuralNetwork()
         
-        # Architecture: Input -> Dense(128) -> ReLU -> Dense(64) -> ReLU -> Dense(num_gestures) -> Softmax
+        # Architecture: Input -> Dense(512) -> ReLU -> Dense(256) -> ReLU -> ...
         self.network.add(Dense(input_size, 512))
         self.network.add(ReLU())
         self.network.add(Dense(512, 256))
@@ -35,19 +39,25 @@ class GestureClassificationNetwork:
         self.network.add(ReLU())
         self.network.add(Dense(128, 64))
         self.network.add(ReLU())
-
         self.network.add(Dense(64, num_gestures))
-        self.network.add(Softmax())
         
-        # Set loss function
-        self.network.set_loss(CategoricalCrossEntropy())
+        # Add final activation and set loss function based on specified loss type
+        if loss_function.lower() == 'mse':
+            # For MSE, no Softmax needed as final activation
+            self.network.set_loss(MeanSquaredError())
+            self.loss_function_type = 'mse'
+        else:  # default to cross_entropy
+            # For Cross Entropy, add Softmax as final activation
+            self.network.add(Softmax())
+            self.network.set_loss(CategoricalCrossEntropy())
+            self.loss_function_type = 'cross_entropy'
         
         # Gesture classes (to be set during training)
         self.gesture_classes = None
         
         # Frame buffer for sequence handling
         self.frame_buffer = []
-        self.buffer_size = 30  # Approximately 1 second at 30fps
+        self.buffer_size = window_size * 3  # Approx 1 second at 30fps
         
     def train(self, X_train, y_train, epochs=50, batch_size=32, learning_rate=0.01):
         """
@@ -58,7 +68,7 @@ class GestureClassificationNetwork:
         X_train : numpy.ndarray
             Training features
         y_train : numpy.ndarray
-            Training labels (either one-hot encoded or class indices)
+            Training labels (one-hot encoded for cross_entropy, direct values for mse)
         epochs : int
             Number of training epochs
         batch_size : int
@@ -66,8 +76,8 @@ class GestureClassificationNetwork:
         learning_rate : float
             Learning rate for gradient descent
         """
-        # If labels are not one-hot encoded, convert them
-        if len(y_train.shape) == 1:
+        # If using cross_entropy and labels are not one-hot encoded, convert them
+        if self.loss_function_type == 'cross_entropy' and len(y_train.shape) == 1:
             # Get number of classes
             num_classes = len(np.unique(y_train))
             # Convert to one-hot
@@ -75,11 +85,17 @@ class GestureClassificationNetwork:
             y_one_hot[np.arange(y_train.shape[0]), y_train] = 1
             y_train = y_one_hot
         
+        # For MSE with one-hot encoded labels, we can use them directly
+        
         # Store unique gesture classes
-        self.gesture_classes = np.unique(np.argmax(y_train, axis=1))
+        if self.loss_function_type == 'cross_entropy':
+            self.gesture_classes = np.unique(np.argmax(y_train, axis=1))
+        else:
+            self.gesture_classes = np.unique(y_train)
         
         # Train network
         self.network.fit(X_train, y_train, epochs, batch_size, learning_rate)
+
     
     def predict(self, X):
         """

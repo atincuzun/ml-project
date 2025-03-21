@@ -461,7 +461,8 @@ def augment_dataset(landmarks, labels):
     """
     print("Applying spatial transformations...")
     landmarks_aug, labels_aug = augment_spatial(landmarks, labels, augmentation_factor=1)
-        
+    
+    
     return landmarks_aug, labels_aug
 
 
@@ -552,13 +553,21 @@ if __name__ == "__main__":
         # 4. Initialize the model
         print("\nStep 4: Initializing the GestureClassificationNetwork...")
         input_size = X_train.shape[1]  # Number of features
-        model = GestureClassificationNetwork(input_size=input_size, num_gestures=num_classes)
+        
+        loss_function_type = 'cross_entropy'  # Default to cross_entropy
+        # You could add an argument parser here to get from command line
+
+        model = GestureClassificationNetwork(
+            input_size=input_size, 
+            num_gestures=num_classes,
+            loss_function=loss_function_type
+        )
         
         # 5. Train the model
         print("\nStep 5: Training the model...")
         epochs = 500
-        batch_size = 128  # Increased batch size for faster training
-        learning_rate = 0.001
+        batch_size = 16  # Increased batch size for faster training
+        learning_rate = 0.0001
         
         model.train(
             X_train=X_train,

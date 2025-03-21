@@ -1,9 +1,0 @@
-opencv-python
-numpy
-mediapipe
-pandas
-pyyaml
-sanic
-matplotlib
-pandas
-jupyter
