@@ -466,12 +466,14 @@ def augment_dataset(landmarks, labels):
     return landmarks_aug, labels_aug
 
 
-# Example usage with complete training pipeline and real-time webcam prediction
+# Modified version of the main function in Dataset.py
+
 if __name__ == "__main__":
     import cv2
     import mediapipe as mp
     from annotation_generator import AnnotationGenerator
     from Network.GestureClassificationNetwork import GestureClassificationNetwork
+    from Trainer.Trainer import GestureTrainer
     import matplotlib.pyplot as plt
     import seaborn as sns
     from collections import deque
@@ -480,6 +482,7 @@ if __name__ == "__main__":
     
     # Path settings
     TRAINING_DATA_DIR = "./TrainingData"
+    VALIDATION_DATA_DIR = "./ValidationData"
     MODEL_SAVE_PATH = "multi_gesture_model.npy"
     
     # Set to True to skip training and just use existing model for webcam prediction
@@ -488,166 +491,93 @@ if __name__ == "__main__":
     # Confidence threshold for prediction
     CONFIDENCE_THRESHOLD = 0.6
     
-    # Noise level for training data robustness
-    NOISE_LEVEL = 0.001
-    
     if not SKIP_TRAINING:
-        # 1. Process all videos in the TrainingData directory
+        # 1. Process training data
         print("Step 1: Processing videos from Training Data directory...")
         generator = AnnotationGenerator()
-        
-        # Process all videos in directory - this will find all gesture types automatically
         generator.process_directory(TRAINING_DATA_DIR)
+        training_landmarks = generator.get_landmark_data()
+        training_labels = generator.get_landmark_label()
         
-        # Get combined landmarks and labels from all videos
-        all_landmarks = generator.get_landmark_data()
-        all_labels = generator.get_landmark_label()
-        
-        print(f"Combined dataset: {len(all_landmarks)} frames")
+        print(f"Combined dataset: {len(training_landmarks)} frames")
         
         # Count label occurrences
         label_counts = {}
-        for label in all_labels:
+        for label in training_labels:
             label_counts[label] = label_counts.get(label, 0) + 1
         
         print("Label distribution:")
         for label, count in label_counts.items():
-            print(f"  {label}: {count} frames ({count/len(all_labels)*100:.1f}%)")
+            print(f"  {label}: {count} frames ({count/len(training_labels)*100:.1f}%)")
         
-        # Apply data augmentation
-        print("\nStep 1.5: Augmenting dataset...")
-        all_landmarks, all_labels = augment_dataset(all_landmarks, all_labels)
-        
-        print(f"Dataset after augmentation: {len(all_landmarks)} frames")
-        
-        # Count label occurrences in augmented dataset
-        label_counts = {}
-        for label in all_labels:
-            label_counts[label] = label_counts.get(label, 0) + 1
-        
-        print("Label distribution after augmentation:")
-        for label, count in label_counts.items():
-            print(f"  {label}: {count} frames ({count/len(all_labels)*100:.1f}%)")
-        
-        # 2. Create dataset with sliding windows
-        print("\nStep 2: Creating sliding windows of temporal data...")
+        # 2. Create dataset
+        print("\nStep 2: Creating dataset...")
         window_size = 10
         step_size = 1
-        dataset = GestureDataset(window_size=window_size, step_size=step_size, noise_level=NOISE_LEVEL)
-        X, y = dataset.prepare_windows(all_landmarks, all_labels)
+        dataset = GestureDataset(window_size=window_size, step_size=step_size)
         
-        # 3. Split data into training and test sets
-        print("\nStep 3: Splitting data into training and test sets...")
-        X_train, X_test, y_train, y_test = stratified_train_test_split(
-            X, y, test_size=0.2, random_seed=42
+        # 3. Process data to get input size and classes
+        print("\nStep 3: Processing data and initializing GestureTrainer...")
+        X, y = dataset.prepare_windows(training_landmarks, training_labels)
+        input_size = X.shape[1]
+        num_classes = len(dataset.get_label_mapping())
+        print(f"Found {num_classes} classes: {list(dataset.get_label_mapping().keys())}")
+        
+        # Initialize the trainer BEFORE using it 
+        trainer = GestureTrainer(
+            input_size=input_size,
+            num_classes=num_classes,
+            window_size=window_size,
+            model_save_path=MODEL_SAVE_PATH
         )
         
-        print(f"Training set: {X_train.shape[0]} samples")
-        print(f"Test set: {X_test.shape[0]} samples")
+        # 4. Now we can use the trainer for data preparation
+        print("\nStep 4: Preparing data...")
         
-        # Convert labels to one-hot encoded format
-        num_classes = len(dataset.get_label_mapping())
-        y_train_one_hot = np.zeros((y_train.shape[0], num_classes))
-        y_train_one_hot[np.arange(y_train.shape[0]), y_train] = 1
+        # Process validation data if available
+        val_landmarks = None
+        val_labels = None
         
-        # 4. Initialize the model
-        print("\nStep 4: Initializing the GestureClassificationNetwork...")
-        input_size = X_train.shape[1]  # Number of features
+        if os.path.exists(VALIDATION_DATA_DIR):
+            print("Processing validation data...")
+            val_generator = AnnotationGenerator()
+            val_generator.process_directory(VALIDATION_DATA_DIR)
+            val_landmarks = val_generator.get_landmark_data()
+            val_labels = val_generator.get_landmark_label()
         
-        loss_function_type = 'cross_entropy'  # Default to cross_entropy
-        # You could add an argument parser here to get from command line
-
-        model = GestureClassificationNetwork(
-            input_size=input_size, 
-            num_gestures=num_classes,
-            loss_function=loss_function_type
+        # Prepare data with the trainer
+        X_train, y_train, X_val, y_val, X_test, y_test = trainer.prepare_data(
+            dataset, training_landmarks, training_labels, val_landmarks, val_labels
         )
         
         # 5. Train the model
         print("\nStep 5: Training the model...")
         epochs = 500
-        batch_size = 16  # Increased batch size for faster training
+        batch_size = 16
         learning_rate = 0.0001
         
-        model.train(
-            X_train=X_train,
-            y_train=y_train_one_hot,
+        trainer.train_with_validation(
+            X_train, y_train, X_val, y_val,
             epochs=epochs,
             batch_size=batch_size,
             learning_rate=learning_rate
         )
         
-        # 6. Evaluate the model
+        # 6. Evaluate and save the model
         print("\nStep 6: Evaluating the model...")
-        # Make predictions - this already returns class indices, not probabilities
-        y_pred_classes = model.predict(X_test)
+        metrics = trainer.evaluate(X_test, y_test)
         
-        # Calculate accuracy
-        accuracy = np.mean(y_pred_classes == y_test)
-        print(f"Test accuracy: {accuracy:.4f}")
-        
-        # Calculate per-class accuracy
-        class_accuracies = {}
-        for i in range(num_classes):
-            # Get indices where true label is class i
-            indices = np.where(y_test == i)[0]
-            if len(indices) > 0:
-                # Calculate accuracy for this class
-                class_acc = np.mean(y_pred_classes[indices] == y_test[indices])
-                # Get class name
-                class_name = dataset.get_index_mapping()[i]
-                class_accuracies[class_name] = class_acc
-        
-        print("\nPer-class accuracy:")
-        for class_name, acc in class_accuracies.items():
-            print(f"  {class_name}: {acc:.4f}")
-        
-        # 7. Save the model
         print(f"\nStep 7: Saving the model to {MODEL_SAVE_PATH}...")
-        model.save_model(MODEL_SAVE_PATH)
-        print("Model saved successfully.")
+        trainer.save_model(included_landmarks=dataset.included_landmarks)
         
-        # Save the gesture mapping alongside the model
-        mapping_path = os.path.splitext(MODEL_SAVE_PATH)[0] + "_mapping.npy"
-        np.save(mapping_path, dataset.get_label_mapping())
-        print(f"Gesture mapping saved to {mapping_path}")
+        # 8. Plot training history and confusion matrix
+        print("\nStep 8: Plotting training history...")
+        trainer.plot_training_history("training_history.png")
+        trainer.plot_confusion_matrix(metrics['confusion_matrix'], "confusion_matrix.png")
         
-        # Save feature extraction parameters
-        params_path = os.path.splitext(MODEL_SAVE_PATH)[0] + "_params.npy"
-        np.save(params_path, {
-            'window_size': window_size,
-            'feature_size': input_size,
-            'noise_level': NOISE_LEVEL,
-            'included_landmarks': dataset.included_landmarks
-        })
-        print(f"Feature parameters saved to {params_path}")
-        
-        # 8. Plot confusion matrix for visualization
-        print("\nStep 8: Generating confusion matrix...")
-        cm = np.zeros((num_classes, num_classes), dtype=int)
-        for i in range(len(y_test)):
-            cm[y_test[i], y_pred_classes[i]] += 1
-        
-        # Create a figure
-        plt.figure(figsize=(10, 8))
-        
-        # Create labels for the plot
-        class_names = [dataset.get_index_mapping()[i] for i in range(num_classes)]
-        
-        # Plot the confusion matrix
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                    xticklabels=class_names, yticklabels=class_names)
-        plt.ylabel('True Label')
-        plt.xlabel('Predicted Label')
-        plt.title('Confusion Matrix')
-        
-        # Save the plot
-        plt.tight_layout()
-        plt.savefig('multi_gesture_confusion_matrix.png')
-        print("Confusion matrix saved to multi_gesture_confusion_matrix.png")
-        
-        # Store the label mapping for webcam prediction
-        idx_to_gesture = dataset.get_index_mapping()
+        # Save model and mapping for webcam prediction
+        idx_to_gesture = trainer.get_index_to_label()
+        model = trainer.model
     else:
         # Load the model and mapping for prediction only
         print("Loading saved model for webcam prediction...")
@@ -683,7 +613,7 @@ if __name__ == "__main__":
         
         print(f"Model loaded with {num_classes} gesture classes: {list(gesture_mapping.keys())}")
     
-    # 9. Real-time webcam prediction
+    # 9. Real-time webcam prediction (same as original code)
     print("\nStep 9: Starting real-time webcam prediction...")
     print("Press 'q' to quit.")
     
@@ -699,7 +629,9 @@ if __name__ == "__main__":
     )
     
     # Get the list of included landmarks (either from params or default)
-    included_landmarks = params.get('included_landmarks', list(range(11, 23))) if 'params' in locals() else list(range(11, 23))
+    included_landmarks = dataset.included_landmarks if 'dataset' in locals() else (
+        params.get('included_landmarks', list(range(11, 23))) if 'params' in locals() else list(range(11, 23))
+    )
     num_included = len(included_landmarks)
     
     # Arrays for feature extraction during webcam

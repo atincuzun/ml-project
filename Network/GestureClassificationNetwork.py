@@ -117,40 +117,7 @@ class GestureClassificationNetwork:
         # Return class with highest probability
         return np.argmax(probabilities, axis=1)
     
-    def add_frame(self, frame_features):
-        """
-        Add frame features to buffer for sequence handling
         
-        Parameters:
-        -----------
-        frame_features : numpy.ndarray
-            Features extracted from current frame
-        """
-        self.frame_buffer.append(frame_features)
-        
-        # Keep buffer at fixed size
-        if len(self.frame_buffer) > self.buffer_size:
-            self.frame_buffer.pop(0)
-    
-    def predict_from_buffer(self):
-        """
-        Make prediction using current frame buffer
-        
-        Returns:
-        --------
-        int or None
-            Predicted gesture class index or None if buffer not full
-        """
-        if len(self.frame_buffer) < self.buffer_size:
-            return None
-        
-        # Combine features from buffer (simple approach: average them)
-        # More sophisticated approaches could be used here
-        combined_features = np.mean(self.frame_buffer, axis=0).reshape(1, -1)
-        
-        # Get prediction
-        return self.predict(combined_features)[0]
-    
     def save_model(self, filename):
         """
         Save model weights to file
