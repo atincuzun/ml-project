@@ -402,3 +402,111 @@ footer {
     }
 }
 
+/* Enhanced gesture icon styles */
+.gesture-icon {
+    width: 150px;
+    height: 150px;
+    background-color: #f4f4f4;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin: 0 auto;
+    font-size: 1.2rem;
+    font-weight: bold;
+    transition: all 0.3s ease-in-out;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    position: relative;
+    overflow: hidden;
+}
+
+.gesture-icon.active {
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(52, 152, 219, 0.7);
+    background-color: #3498db;
+}
+
+.gesture-icon.active::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle, transparent 30%, rgba(255, 255, 255, 0.1) 70%);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(0.9);
+        opacity: 0.7;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.3;
+    }
+    100% {
+        transform: scale(0.9);
+        opacity: 0.7;
+    }
+}
+
+.gesture-icon img {
+    max-width: 80px;
+    max-height: 80px;
+    margin-bottom: 10px;
+    transition: transform 0.3s;
+}
+
+.gesture-icon.active img {
+    transform: scale(1.1);
+}
+
+#gestureText {
+    text-align: center;
+    margin-top: 5px;
+    font-size: 14px;
+    color: #333;
+    transition: color 0.3s;
+}
+
+.gesture-icon.active #gestureText {
+    color: white;
+}
+
+/* Keyboard simulation info */
+.keyboard-info {
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    padding: 10px 15px;
+    margin-top: 15px;
+    border-left: 4px solid #3498db;
+}
+
+.keyboard-info h4 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    color: #2c3e50;
+}
+
+.keyboard-info ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+/* Add to templates to show when model isn't loaded */
+.model-status {
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-left: 4px solid #e74c3c;
+    font-size: 14px;
+}
+
+.model-status.loaded {
+    border-left-color: #2ecc71;
+}

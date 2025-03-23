@@ -9,12 +9,64 @@
     .log-container {
         display: none;
     }
+
+    /* Keyboard guide styles */
+    .keyboard-info {
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        padding: 10px 15px;
+        margin: 15px 0;
+        border-left: 4px solid #3498db;
+    }
+
+    .keyboard-info h4 {
+        margin-top: 0;
+        margin-bottom: 8px;
+        color: #2c3e50;
+    }
+
+    .keyboard-info ul {
+        margin: 0;
+        padding-left: 20px;
+    }
+
+    /* Status message */
+    .status-message {
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+        background-color: #f8f9fa;
+        border-left: 4px solid #e74c3c;
+    }
+
+    .status-message.success {
+        border-left-color: #2ecc71;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container">
     <h2>Webcam Gesture Recognition</h2>
+
+    <!-- Status message for model loading - initially hidden -->
+    <div id="modelStatus" class="status-message" style="display: none;">
+        <strong>Model Status:</strong> <span id="modelStatusText">Checking...</span>
+    </div>
+
+    <!-- Keyboard guide for gesture simulation - initially hidden -->
+    <div id="keyboardGuide" class="keyboard-info" style="display: none;">
+        <h4>Keyboard Controls (Model Not Loaded)</h4>
+        <p>Since no gesture recognition model is loaded, you can use these number keys to simulate gestures:</p>
+        <ul>
+            <li><strong>1:</strong> Swipe Left</li>
+            <li><strong>2:</strong> Swipe Right</li>
+            <li><strong>3:</strong> Rotate Clockwise</li>
+            <li><strong>4:</strong> Rotate Counter-clockwise</li>
+            <li><strong>5:</strong> Hand Up</li>
+            <li><strong>6:</strong> Hand Down</li>
+        </ul>
+    </div>
 
     <div class="controls">
         <button id="selectCameraBtn" class="control-button">Select Camera</button>
@@ -68,6 +120,42 @@
         </div>
     </div>
 </div>
+
+<!-- Script to check model status and show keyboard guide -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modelStatus = document.getElementById('modelStatus');
+    const modelStatusText = document.getElementById('modelStatusText');
+    const keyboardGuide = document.getElementById('keyboardGuide');
+
+    // Check model status after a brief delay
+    setTimeout(function() {
+        console.log("Checking model status...");
+        fetch('/check_model_status')
+            .then(response => response.json())
+            .then(data => {
+                modelStatus.style.display = 'block';
+
+                if (data.model_loaded) {
+                    modelStatus.className = 'status-message success';
+                    modelStatusText.textContent = 'Loaded - Using neural network for gesture recognition';
+                    keyboardGuide.style.display = 'none';
+                } else {
+                    modelStatus.className = 'status-message';
+                    modelStatusText.textContent = 'Not loaded - Using keyboard simulation for gestures';
+                    keyboardGuide.style.display = 'block';
+                }
+
+                console.log("Model status check complete:", data);
+            })
+            .catch(error => {
+                console.error('Error checking model status:', error);
+                modelStatus.style.display = 'block';
+                modelStatusText.textContent = 'Error checking model status';
+            });
+    }, 1000);
+});
+</script>
 {% endblock %}
 
 {% block extra_js %}

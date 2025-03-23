@@ -46,6 +46,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Connect to gesture stream
     connectToGestureStream();
 
+    // Set up keyboard simulation for gestures
+    setupKeyboardGestureSimulation();
+
     // Connect to the Server-Sent Events stream for gestures
     function connectToGestureStream() {
         const eventSource = new EventSource('/gesture_stream');
@@ -57,12 +60,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update current timestamp
                 currentTimestamp = Date.now() - logStartTime;
 
-                if (data.gesture !== 'idle') {
-                    // Update the gesture display
-                    updateGestureDisplay(data.gesture);
+                // CHANGE: Only process and display registered events
+                // Previously we were showing all gestures, now only show events
+                if (data.event && data.event !== "idle") {
+                    console.log("Registered gesture event:", data.event);
 
-                    // Add to gesture history
-                    addToGestureHistory(data.gesture, currentTimestamp);
+                    // Update the gesture display with the event
+                    updateGestureDisplay(data.event, true);
+
+                    // Add to gesture history with timestamp in seconds
+                    addToGestureHistory(data.event, currentTimestamp);
 
                     // Update the gesture history display
                     updateGestureHistoryDisplay();
@@ -85,6 +92,93 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Store the eventSource to close it when needed
         window.gestureEventSource = eventSource;
+    }
+
+    // Set up keyboard simulation for gestures
+    function setupKeyboardGestureSimulation() {
+        console.log("Setting up keyboard gesture simulation");
+
+        // Keyboard mapping for gesture simulation
+        const KEY_GESTURES = {
+            '1': 'swipe_left',
+            '2': 'swipe_right',
+            '3': 'rotate_cw',
+            '4': 'rotate_ccw',
+            '5': 'hand_up',
+            '6': 'hand_down'
+        };
+
+        let keydownActive = false;
+        let activeGesture = null;
+        let simulationInterval = null;
+
+        // Add keyboard event listeners for number keys
+        document.addEventListener('keydown', function(e) {
+            const key = e.key;
+            console.log("Key pressed:", key);
+
+            // Check if the key is one of our mapped gesture keys
+            if (KEY_GESTURES[key] && !keydownActive) {
+                console.log("Recognized gesture key:", key);
+                keydownActive = true;
+                activeGesture = KEY_GESTURES[key];
+
+                // Simulate the gesture immediately
+                simulateGesture(activeGesture);
+
+                // Keep simulating while key is held down - but with a reasonable interval
+                // to allow post-processing to work properly (avoid spamming)
+                simulationInterval = setInterval(() => {
+                    simulateGesture(activeGesture);
+                }, 200); // 5 times per second is enough
+            }
+        });
+
+        document.addEventListener('keyup', function(e) {
+            const key = e.key;
+
+            // If this is the currently active gesture key, stop simulation
+            if (KEY_GESTURES[key] && activeGesture === KEY_GESTURES[key]) {
+                console.log("Stopping gesture simulation for key:", key);
+                keydownActive = false;
+                activeGesture = null;
+
+                // Stop the simulation interval
+                if (simulationInterval) {
+                    clearInterval(simulationInterval);
+                    simulationInterval = null;
+                }
+            }
+        });
+    }
+
+    // Function to simulate a gesture via API
+    function simulateGesture(gesture) {
+        console.log("Simulating gesture:", gesture);
+        fetch('/simulate_gesture', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ gesture: gesture })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log("Gesture simulation response:", data);
+
+            // CHANGE: Only process and display if this became an event
+            if (data.event && data.event !== 'idle') {
+                console.log("Simulation produced event:", data.event);
+
+                // Update display with the event and add to history
+                updateGestureDisplay(data.event, true);
+                addToGestureHistory(data.event, currentTimestamp);
+                updateGestureHistoryDisplay();
+            }
+        })
+        .catch(error => {
+            console.error('Error simulating gesture:', error);
+        });
     }
 
     // Event listeners
@@ -117,7 +211,7 @@ document.addEventListener('DOMContentLoaded', function() {
         saveModal.style.display = 'none';
     });
 
-    // Add keyboard event listener for gesture simulation
+    // Add keyboard event listener for arrow keys (legacy from old code)
     document.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
             e.key === 'ArrowUp' || e.key === 'ArrowDown' ||
@@ -156,9 +250,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (gesture) {
-                updateGestureDisplay(gesture);
-                addToGestureHistory(gesture, currentTimestamp);
-                updateGestureHistoryDisplay();
+                simulateGesture(gesture);
             }
         }
     });
@@ -303,7 +395,7 @@ document.addEventListener('DOMContentLoaded', function() {
         isStreaming = false;
     }
 
-    function updateGestureDisplay(gesture) {
+    function updateGestureDisplay(gesture, isEvent = true) {
         // Clear any existing timeout
         if (gestureDisplayTimeout) {
             clearTimeout(gestureDisplayTimeout);
@@ -314,20 +406,31 @@ document.addEventListener('DOMContentLoaded', function() {
             gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
             gestureIcon.style.backgroundColor = '#f4f4f4';
             gestureIcon.classList.remove('active');
+            gestureIcon.style.opacity = 1.0;
         } else {
             // Use gesture icon images
             gestureIcon.innerHTML = `
                 <img src="${gestureIcons[gesture]}" alt="${formatGestureName(gesture)}" style="width: 80px; height: 80px;">
-                <span id="gestureText">${formatGestureName(gesture)}</span>
+                <span id="gestureText">${formatGestureName(gesture)}${isEvent ? ' (Event)' : ''}</span>
             `;
-            gestureIcon.style.backgroundColor = '#3498db';
-            gestureIcon.classList.add('active');
+
+            // Full highlight for events, subdued for raw gestures
+            if (isEvent) {
+                gestureIcon.style.backgroundColor = '#3498db';
+                gestureIcon.classList.add('active');
+                gestureIcon.style.opacity = 1.0;
+            } else {
+                gestureIcon.style.backgroundColor = '#a4c9e8'; // Lighter blue
+                gestureIcon.classList.remove('active');
+                gestureIcon.style.opacity = 0.7;
+            }
 
             // Set timeout to revert after 3 seconds
             gestureDisplayTimeout = setTimeout(() => {
                 gestureIcon.innerHTML = '<span id="gestureText">No gesture</span>';
                 gestureIcon.style.backgroundColor = '#f4f4f4';
                 gestureIcon.classList.remove('active');
+                gestureIcon.style.opacity = 1.0;
             }, GESTURE_DISPLAY_DURATION);
         }
     }
@@ -369,7 +472,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const gestureTime = document.createElement('span');
             gestureTime.className = 'gesture-time';
-            gestureTime.textContent = `${item.timestamp} ms`;
+            // CHANGE: Convert milliseconds to seconds with 1 decimal place
+            const timeInSeconds = (item.timestamp / 1000).toFixed(1);
+            gestureTime.textContent = `${timeInSeconds} sec`;
 
             listItem.appendChild(gestureName);
             listItem.appendChild(gestureTime);

@@ -44,18 +44,33 @@ data_handler = CSVDataHandler()
 
 # Open browser automatically when the app starts
 def open_browser():
+    import webbrowser
+    import time
+    import platform
+    
+    print("\n* Waiting for Flask server to start...")
+    time.sleep(1.0)  # Wait longer for server to fully initialize
+    
+    url = 'http://127.0.0.1:5000/'
+    print(f"* Opening browser to {url}")
+    
     try:
-        import webbrowser
-        import time
+        # Different approaches for different platforms
+        system = platform.system()
+        if system == 'Windows':
+            # On Windows, try to use the default browser
+            webbrowser.get('windows-default').open(url)
+        elif system == 'Darwin':  # macOS
+            # On macOS, try to use the default browser
+            webbrowser.get('safari').open(url)
+        else:
+            # On Linux and other platforms, use the default
+            webbrowser.open(url)
         
-        # Give the server more time to start
-        time.sleep(2.0)
-        
-        # Attempt to open browser with explicit URL
-        print("Opening browser to http://127.0.0.1:5000/ ...")
-        webbrowser.open('http://127.0.0.1:5000/', new=2)
+        print("* Browser should be opening now")
     except Exception as e:
-        print(f"Error opening browser: {e}")
+        print(f"* Error opening browser: {e}")
+        print(f"* Please manually navigate to {url}")
 
 
 @app.route('/')
@@ -585,14 +600,22 @@ def gesture_stream():
         last_gesture = "idle"
         last_mode = "Registering"
         last_percentage = 0
+        last_event = "idle"
         
         while True:
+            # Get current gesture and its information
             current_gesture = processor.last_gesture
+            current_event = "idle"  # Default: not an event
             
             # Get additional info if available
             current_mode = processor.gesture_processor.mode if hasattr(processor,
                                                                        'gesture_processor') else "Registering"
             current_percentage = 0
+            
+            # Check if this should be registered as an event
+            if current_mode == "Registered" and hasattr(processor, 'gesture_processor'):
+                # In Registered mode, the latest gesture has become an event
+                current_event = processor.gesture_processor.registered_gesture
             
             if hasattr(processor, 'gesture_processor'):
                 # Calculate mode percentage
@@ -626,9 +649,12 @@ def gesture_stream():
             # Only send when anything changes
             if (current_gesture != last_gesture or
                     current_mode != last_mode or
+                    current_event != last_event or
                     abs(current_percentage - last_percentage) > 1.0):
+                
                 data = json.dumps({
                     'gesture': current_gesture,
+                    'event': current_event,
                     'mode': current_mode,
                     'percentage': current_percentage
                 })
@@ -637,6 +663,11 @@ def gesture_stream():
                 last_gesture = current_gesture
                 last_mode = current_mode
                 last_percentage = current_percentage
+                last_event = current_event
+                
+                # Print debug info on event changes
+                if current_event != "idle" and current_event != last_event:
+                    print(f"* Gesture '{current_gesture}' registered as event: '{current_event}'")
             
             # Still need a small delay to prevent CPU overuse
             time.sleep(0.1)
@@ -988,16 +1019,106 @@ def check_video_status():
     })
 
 
+# Add this route to app.py
+@app.route('/simulate_gesture', methods=['POST'])
+def simulate_gesture():
+    """
+    Endpoint to simulate a gesture via keyboard input or API call.
+    Simulated gestures undergo the same post-processing as real ones.
+    """
+    try:
+        data = request.json
+        gesture = data.get('gesture', 'idle')
+        
+        print(f"\n* Simulating gesture: {gesture}")
+        
+        # Only allow simulation if model isn't loaded
+        if not hasattr(processor, 'gesture_model') or not processor.gesture_model.model_loaded:
+            # First ensure we have a gesture processor
+            if not hasattr(processor, 'gesture_processor'):
+                return jsonify({
+                    'success': False,
+                    'message': 'Gesture processor not available',
+                    'event': 'idle'
+                }), 500
+            
+            # Add to the processor's last gesture info (for display purposes only)
+            processor.last_gesture = gesture
+            processor.last_gesture_time = time.time() * 1000
+            
+            # Process through post-processor to determine if this should become an event
+            event, mode, mode_percentage = processor.gesture_processor.process(gesture)
+            print(f"* Post-processed: gesture={gesture}, event={event}, mode={mode}, percentage={mode_percentage:.1f}%")
+            
+            # Add to log data
+            timestamp = int(time.time() * 1000)
+            processor.log_data["timestamp"].append(timestamp)
+            processor.log_data["events"].append(event)  # This is key - only events trigger actions
+            processor.log_data["gesture"].append(gesture)
+            processor.log_data["mode"].append(mode)
+            processor.log_data["mode_percentage"].append(mode_percentage)
+            
+            # Return both the simulated gesture and the post-processed event
+            return jsonify({
+                'success': True,
+                'message': f'Simulated gesture: {gesture}',
+                'model_active': False,
+                'gesture': gesture,  # The raw simulated gesture
+                'event': event,  # The post-processed event (might be 'idle')
+                'mode': mode,
+                'mode_percentage': mode_percentage
+            })
+        else:
+            print("* Cannot simulate gesture when model is active")
+            return jsonify({
+                'success': False,
+                'message': 'Cannot simulate gesture when model is active',
+                'model_active': True,
+                'event': 'idle'
+            })
+    
+    except Exception as e:
+        print(f"* Error simulating gesture: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error simulating gesture: {str(e)}',
+            'event': 'idle'
+        }), 500
+
+
+@app.route('/check_model_status')
+def check_model_status():
+    """Check if the gesture recognition model is loaded"""
+    model_loaded = False
+    
+    try:
+        if hasattr(processor, 'gesture_model') and processor.gesture_model:
+            model_loaded = processor.gesture_model.model_loaded
+        
+        return jsonify({
+            'model_loaded': model_loaded,
+            'gestures': processor.gesture_model.gestures if model_loaded else []
+        })
+    except Exception as e:
+        return jsonify({
+            'model_loaded': False,
+            'error': str(e)
+        })
+
+
 if __name__ == '__main__':
     # Create upload folder if it doesn't exist
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
     
-    # Check if we're in the reloader process to prevent opening the browser twice
-    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
-        import threading
-        
-        threading.Timer(2.0, open_browser).start()
+    open_browser()
     
-    # Run with host explicitly specified
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    # Print clear startup message
+    print("\n* Starting Flask development server...")
+    print("* Debug mode: ENABLED")
+    print("* Server will be available at: http://127.0.0.1:5000/")
+    
+    # Run the app with debug explicitly set
+    app.run(host='127.0.0.1', port=5000, debug=True)

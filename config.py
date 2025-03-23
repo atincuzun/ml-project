@@ -9,6 +9,11 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'upload
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
 MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500MB max upload size
 
+# Model paths
+MODEL_ROOT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
+GESTURE_MODEL_PATH = os.path.join(MODEL_ROOT_PATH, "gesture_model.npy")
+GESTURE_MAPPING_PATH = os.path.join(MODEL_ROOT_PATH, "gesture_model_mapping.npy")
+
 # MediaPipe settings
 MEDIAPIPE_MIN_DETECTION_CONFIDENCE = 0.5
 MEDIAPIPE_MIN_TRACKING_CONFIDENCE = 0.5

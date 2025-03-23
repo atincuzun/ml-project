@@ -34,8 +34,12 @@ document.addEventListener('DOMContentLoaded', function() {
         'hand_down': '/static/img/hand_down.png'
     };
 
-    // Update gesture controls info
-    updateGestureControlsInfo();
+    // Track last processed event to prevent duplicates
+    let lastProcessedEvent = {
+        event: null,
+        timestamp: 0
+    };
+    const EVENT_COOLDOWN = 500; // ms between same events
 
     // Game constants
     const ROWS = 20;
@@ -86,14 +90,28 @@ document.addEventListener('DOMContentLoaded', function() {
     // Connect to gesture stream
     connectToGestureStream();
 
+    // Check if model is loaded, show keyboard guide if not
+    checkModelStatus();
+
+    // Add keyboard simulation for gestures
+    setupKeyboardGestureSimulation();
+
     function connectToGestureStream() {
         const eventSource = new EventSource('/gesture_stream');
 
         eventSource.onmessage = function(event) {
             try {
                 const data = JSON.parse(event.data);
+
+                // In SSE data, recognize post-processed events from gestures
+                // data.mode will be "Registering" or "Registered"
+                if (data.mode && data.mode === "Registered") {
+                    // This is a registered event
+                    handleRegisteredEvent(data.gesture);
+                }
+
+                // Always update gesture display for visual feedback
                 if (data.gesture !== 'idle') {
-                    handleGesture(data.gesture);
                     updateGestureDisplay(data.gesture);
                 }
             } catch (error) {
@@ -124,36 +142,110 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.addEventListener('keydown', handleKeyPress);
 
-    // Add styles for the active gesture icon
-    const style = document.createElement('style');
-    style.textContent = `
-        .gesture-icon {
-            transition: all 0.3s ease-in-out;
-        }
-        
-        .gesture-icon.active {
-            transform: scale(1.1);
-            box-shadow: 0 0 20px rgba(52, 152, 219, 0.7);
-        }
-    `;
-    document.head.appendChild(style);
-
-    // Functions
-    function updateGestureControlsInfo() {
-        // Update the gesture controls text in the UI
-        const gestureControlList = document.querySelector('.gesture-control-list');
-        if (gestureControlList) {
-            gestureControlList.innerHTML = `
-                <li><strong>Swipe Left:</strong> Move Left</li>
-                <li><strong>Swipe Right:</strong> Move Right</li>
-                <li><strong>Rotate Clockwise:</strong> Rotate Clockwise</li>
-                <li><strong>Rotate Counterclockwise:</strong> Rotate Counterclockwise</li>
-                <li><strong>Hand Up:</strong> Switch with Next Piece</li>
-                <li><strong>Hand Down:</strong> Hard Drop</li>
-            `;
-        }
+    // Check model status and show keyboard guide if needed
+    function checkModelStatus() {
+        setTimeout(function() {
+            fetch('/check_model_status')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.model_loaded) {
+                        // Show keyboard guide if it exists
+                        const keyboardGuide = document.getElementById('keyboardGuide');
+                        if (keyboardGuide) {
+                            keyboardGuide.style.display = 'block';
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking model status:', error);
+                });
+        }, 1000);
     }
 
+    // Set up keyboard simulation for gestures
+    function setupKeyboardGestureSimulation() {
+        // Keyboard mapping for gesture simulation
+        const KEY_GESTURES = {
+            '1': 'swipe_left',
+            '2': 'swipe_right',
+            '3': 'rotate_cw',
+            '4': 'rotate_ccw',
+            '5': 'hand_up',
+            '6': 'hand_down'
+        };
+
+        let keydownActive = false;
+        let activeGesture = null;
+        let simulationInterval = null;
+
+        // Add keyboard event listeners for number keys
+        document.addEventListener('keydown', function(e) {
+            const key = e.key;
+
+            // Check if the key is one of our mapped gesture keys
+            if (KEY_GESTURES[key] && !keydownActive) {
+                keydownActive = true;
+                activeGesture = KEY_GESTURES[key];
+
+                // Simulate the gesture right away
+                simulateGesture(activeGesture);
+
+                // Keep simulating while key is held down - but with a reasonable interval
+                // to allow post-processing to work properly (avoid spamming)
+                simulationInterval = setInterval(() => {
+                    simulateGesture(activeGesture);
+                }, 200); // 5 times per second is enough
+            }
+        });
+
+        document.addEventListener('keyup', function(e) {
+            const key = e.key;
+
+            // If this is the currently active gesture key, stop simulation
+            if (KEY_GESTURES[key] && activeGesture === KEY_GESTURES[key]) {
+                keydownActive = false;
+                activeGesture = null;
+
+                // Stop the simulation interval
+                if (simulationInterval) {
+                    clearInterval(simulationInterval);
+                    simulationInterval = null;
+                }
+            }
+        });
+    }
+
+    // Function to simulate a gesture via API
+    function simulateGesture(gesture) {
+        fetch('/simulate_gesture', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ gesture: gesture })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Gesture simulation response:', data);
+
+            if (data.success) {
+                // Display the gesture icon for visual feedback
+                updateGestureDisplay(data.gesture);
+
+                // Check if this simulation produced an event after post-processing
+                if (data.event && data.event !== 'idle') {
+                    console.log('Simulation produced event:', data.event);
+                    // Handle the event (this is what actually moves pieces, etc.)
+                    handleRegisteredEvent(data.event);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error simulating gesture:', error);
+        });
+    }
+
+    // Functions
     function createBoard() {
         return Array.from(Array(ROWS), () => Array(COLS).fill(0));
     }
@@ -504,7 +596,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!gameActive || gamePaused) return;
 
         // Prevent default behavior for arrow keys and space
-        if ([32, 37, 38, 39, 40, 85, 68].includes(e.keyCode)) {
+        if ([32, 37, 38, 39, 40, 85, 68, 90].includes(e.keyCode)) {
             e.preventDefault();
         }
 
@@ -583,10 +675,27 @@ document.addEventListener('DOMContentLoaded', function() {
         webcamFeed.src = videoUrl;
     }
 
-    function handleGesture(gesture) {
+    // Critical function: handle actual registered events
+    // This function is called only when a gesture has been registered through post-processing
+    function handleRegisteredEvent(event) {
         if (!gameActive || gamePaused) return;
 
-        switch (gesture) {
+        // Check if this event is a duplicate (prevent rapid-fire events)
+        const now = Date.now();
+        if (lastProcessedEvent.event === event &&
+            (now - lastProcessedEvent.timestamp) < EVENT_COOLDOWN) {
+            console.log(`Ignoring duplicate event: ${event} (too soon)`);
+            return;
+        }
+
+        // Update the last processed event
+        lastProcessedEvent.event = event;
+        lastProcessedEvent.timestamp = now;
+
+        console.log(`Processing registered event: ${event}`);
+
+        // Handle the event based on type
+        switch (event) {
             case 'swipe_left':
                 playerMove(-1);
                 break;

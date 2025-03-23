@@ -62,8 +62,41 @@
         {% endif %}
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/presentation.js') }}"></script>
 {% endblock %}
+
+<div id="keyboardGuide" class="keyboard-info" style="display: none;">
+    <h4>Keyboard Controls (Model Not Loaded)</h4>
+    <p>You can use these keys to simulate gestures:</p>
+    <ul>
+        <li><strong>1:</strong> Swipe Left</li>
+        <li><strong>2:</strong> Swipe Right</li>
+        <li><strong>3:</strong> Rotate Clockwise</li>
+        <li><strong>4:</strong> Rotate Counter-clockwise</li>
+        <li><strong>5:</strong> Hand Up</li>
+        <li><strong>6:</strong> Hand Down</li>
+    </ul>
+</div>
+
+<script>
+// Show keyboard guide if model isn't loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Check model status after a brief delay to allow initialization
+    setTimeout(function() {
+        fetch('/check_model_status')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.model_loaded) {
+                    document.getElementById('keyboardGuide').style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Error checking model status:', error);
+            });
+    }, 1000);
+});
+</script>

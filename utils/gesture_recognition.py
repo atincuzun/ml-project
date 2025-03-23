@@ -21,7 +21,7 @@ class GestureRecognitionModel:
 	and handles the preprocessing and postprocessing of input data.
 	"""
 	
-	def __init__(self, threshold: float = 0.6, model_path: str = "gesture_model.npy", mapping_path: str = None):
+	def __init__(self, threshold: float = 0.6, model_path: str = None, mapping_path: str = None):
 		"""
 		Initialize the gesture recognition model.
 
@@ -30,6 +30,19 @@ class GestureRecognitionModel:
 			model_path: Path to the pre-trained model
 			mapping_path: Path to the gesture mapping file
 		"""
+		# Import config for model paths
+		try:
+			from config import GESTURE_MODEL_PATH, GESTURE_MAPPING_PATH
+			if model_path is None:
+				model_path = GESTURE_MODEL_PATH
+			if mapping_path is None:
+				mapping_path = GESTURE_MAPPING_PATH
+			print(f"Using model path from config: {model_path}")
+		except (ImportError, AttributeError):
+			print("Warning: Could not import model paths from config")
+			if model_path is None:
+				model_path = "gesture_model.npy"  # Default fallback
+		
 		self.threshold = threshold
 		self.gestures = ["idle"]  # Default gesture list
 		self.model = None
@@ -39,7 +52,9 @@ class GestureRecognitionModel:
 		self.gesture_mapping = {}
 		
 		# Try to load gesture mapping
-		mapping_path = mapping_path or os.path.splitext(model_path)[0] + "_mapping.npy"
+		if mapping_path is None:
+			mapping_path = os.path.splitext(model_path)[0] + "_mapping.npy"
+		
 		if os.path.exists(mapping_path):
 			try:
 				self.gesture_mapping = np.load(mapping_path, allow_pickle=True).item()
@@ -85,8 +100,10 @@ class GestureRecognitionModel:
 						traceback.print_exc()
 				else:
 					print(f"Model file {model_path} not found. Model will not work.")
+					print("Keyboard gesture simulation will be available.")
 			else:
 				print("GestureClassificationNetwork module not available. Model will not work.")
+				print("Keyboard gesture simulation will be available.")
 		except Exception as e:
 			print(f"Error initializing gesture recognition model: {e}")
 			import traceback
@@ -272,11 +289,6 @@ class GesturePostProcessor:
 		self.recognized_gestures = []  # Buffer of recognized gestures
 		self.mode = "Registering"  # Current mode (Registering or Registered)
 		self.registered_gesture = None  # Currently registered gesture
-		
-		# Special handling for immediate gestures (hand_up, hand_down)
-		self.immediate_gestures = ["hand_up", "hand_down"]
-		self.immediate_gesture_cooldown = 0  # Counter for cooldown between immediate gestures
-		self.cooldown_threshold = 15  # Number of frames to wait before allowing another immediate gesture
 	
 	def process(self, gesture: str) -> tuple:
 		"""
@@ -291,17 +303,6 @@ class GesturePostProcessor:
 			- mode: Current mode ("Registering" or "Registered")
 			- mode_percentage: Percentage indicating recognition strength
 		"""
-		# Special handling for immediate gestures
-		if gesture in self.immediate_gestures and self.immediate_gesture_cooldown <= 0:
-			# Reset cooldown
-			self.immediate_gesture_cooldown = self.cooldown_threshold
-			
-			# Return the immediate gesture as an event
-			return gesture, "Immediate", 100.0
-		
-		# Decrement cooldown if active
-		if self.immediate_gesture_cooldown > 0:
-			self.immediate_gesture_cooldown -= 1
 		
 		# Add the gesture to the buffer
 		self.recognized_gestures.append(gesture)
@@ -349,8 +350,6 @@ class GesturePostProcessor:
 			# Register the gesture and switch to Registered mode
 			self.registered_gesture = max_gesture
 			self.mode = "Registered"
-			# Clear buffer for new mode
-			self.recognized_gestures = []
 			event = max_gesture
 		
 		return event, "Registering", percentage
@@ -374,8 +373,6 @@ class GesturePostProcessor:
 			# Switch back to Registering mode
 			self.mode = "Registering"
 			self.registered_gesture = None
-			# Clear buffer for new mode
-			self.recognized_gestures = []
 		
 		return "idle", "Registered", percentage
 	
@@ -384,4 +381,3 @@ class GesturePostProcessor:
 		self.recognized_gestures = []
 		self.mode = "Registering"
 		self.registered_gesture = None
-		self.immediate_gesture_cooldown = 0

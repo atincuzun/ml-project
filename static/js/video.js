@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const frameDisplay = document.createElement('div');
         frameDisplay.id = 'currentFrame';
         frameDisplay.className = 'current-frame';
-        frameDisplay.textContent = 'Frame: 0';
+        frameDisplay.textContent = 'Frame: 0 (0.0 sec)';
 
         // Create gesture history container
         const historyContainer = document.createElement('div');
@@ -352,12 +352,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentFrame++;
                 updateFrameDisplay(currentFrame);
 
-                // Update gesture display if not idle
-                if (data.gesture !== 'idle') {
-                    updateGestureDisplay(data.gesture);
+                // CHANGE: Only process and display registered events
+                // Previously we were showing all gestures, now only show events
+                if (data.event && data.event !== 'idle') {
+                    // Update gesture display with the event
+                    updateGestureDisplay(data.event);
 
-                    // Add to gesture history
-                    addToGestureHistory(data.gesture, currentFrame);
+                    // Add to gesture history with frame converted to seconds
+                    // Assume default 30fps if we don't have specific info
+                    const estimatedSeconds = (currentFrame / 30).toFixed(1);
+                    addToGestureHistory(data.event, estimatedSeconds);
 
                     // Update the gesture history display
                     updateGestureHistoryDisplay();
@@ -597,11 +601,11 @@ document.addEventListener('DOMContentLoaded', function() {
             .join(' ');
     }
 
-    function addToGestureHistory(gesture, frame) {
+    function addToGestureHistory(gesture, seconds) {
         // Add gesture to history
         gestureHistory.unshift({
             gesture: gesture,
-            frame: frame
+            seconds: seconds
         });
 
         // Keep only the most recent items
@@ -625,12 +629,13 @@ document.addEventListener('DOMContentLoaded', function() {
             gestureName.className = 'gesture-name';
             gestureName.textContent = formatGestureName(item.gesture);
 
-            const gestureFrame = document.createElement('span');
-            gestureFrame.className = 'gesture-frame';
-            gestureFrame.textContent = `Frame ${item.frame}`;
+            const gestureTime = document.createElement('span');
+            gestureTime.className = 'gesture-time';
+            // CHANGE: Display time in seconds
+            gestureTime.textContent = `${item.seconds} sec`;
 
             listItem.appendChild(gestureName);
-            listItem.appendChild(gestureFrame);
+            listItem.appendChild(gestureTime);
 
             historyList.appendChild(listItem);
         });
